@@ -15,6 +15,7 @@
 typedef geometry_msgs::msg::Point Point;
 
 #define VESSEL_NUM 7
+#define PI std::acos(-1)
 
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -33,7 +34,8 @@ typedef enum TASK_CODE{
 class sUAV : public rclcpp::Node {
 public:
     Point UAV_pos, sat_vel, USV_pos, vsl_pos[VESSEL_NUM], takeoff_point;
-    geometry_msgs::msg::Twist UAV_vel, USV_vel, vsl_vel[VESSEL_NUM];
+    geometry_msgs::msg::Twist USV_vel, vsl_vel[VESSEL_NUM];
+    geometry_msgs::msg::Quaternion UAV_quat;
     double UAV_Euler[3];
     double R_e2b[3][3];
     double air_pressure;
@@ -43,6 +45,7 @@ public:
     int loop, search_tra_finish, vsl_id;
     std::vector<Point> map_tra;
     int map_tra_finish;
+    double map_init_theta;
     
 
     sUAV(char *name) : Node("sUAV_" + std::string(name)) {
@@ -143,7 +146,7 @@ private:
 
     void nav_callback(const geometry_msgs::msg::Pose & msg){
         this->UAV_pos = msg.position;
-        set_value(this->UAV_vel.linear, msg.orientation);
+        set_value(this->UAV_quat, msg.orientation);
     }
 
     void usv_pose_callback(const geometry_msgs::msg::Pose & msg){
@@ -191,6 +194,14 @@ private:
         a.x = b.x;
         a.y = b.y;
         a.z = b.z;
+    }
+
+    template<typename T1, typename T2>
+    void set_value_quaternion(T1 &a, T2 b){
+        a.x = b.x;
+        a.y = b.y;
+        a.z = b.z;
+        a.w = b.w;
     }
     
     template<typename T>
@@ -257,7 +268,6 @@ private:
     template<typename T>
     void UAV_Control_to_Point(T ctrl_cmd){
     	printf("Now UAV @ %.6lf %.6lf %.6lf\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
-    	printf("With Vel %.6lf %.6lf %.6lf\n", UAV_vel.linear.x, UAV_vel.linear.y, UAV_vel.linear.z);
         UAV_Control(point_minus(ctrl_cmd, UAV_pos));
     }
 
@@ -287,7 +297,7 @@ private:
                 printf("Search Completed!\n");
                 search_tra_finish = 0;
                 task_state = MAP;
-                map_tra_finish = 0;
+                StepMapInit();
             }
         }
         for (int i = 0; i < VESSEL_NUM; i++){
@@ -296,15 +306,25 @@ private:
                 vsl_id = i;
                 search_tra_finish = 0;
                 task_state = MAP;
-                map_tra_finish = 0;
+                StepMapInit();
             }
+        }
+    }
+
+    void StepMapInit(){
+        map_tra_finish = 0;
+        map_init_theta = atan2(vsl_pos[vsl_id].y - UAV_pos.y, vsl_pos[vsl_id].x - UAV_pos.x);
+        for (int i = 0; i < 100; i++){
+            map_tra.push_back(new_point(std::cos(1.0 * i / 100 * 2 * PI + map_init_theta) * 30,
+                                        std::sin(1.0 * i / 100 * 2 * PI + map_init_theta) * 30,
+                                        30));
         }
     }
 
     void StepMap(){
      	printf("MAP!!!\n");
-        UAV_Control_to_point_while_facing(map_tra[map_tra_finish], vsl_pos[vsl_id]);
-        if (is_near(map_tra[map_tra_finish], 1)){
+        UAV_Control_to_point_while_facing(point_plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
+        if (is_near(point_plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), 1)){
             map_tra_finish++;
             printf("#%d Map Point Arrived!\n", map_tra_finish);
             if (map_tra_finish == int(map_tra.size())){
