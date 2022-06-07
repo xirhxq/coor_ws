@@ -63,7 +63,8 @@ public:
                 "/model/usv/world_pose", 10,
                 std::bind(&sUAV::usv_pose_callback, this, _1));
         for (int i = 0; i < VESSEL_NUM; i++){
-            std::string chara_str = "" + char('A' + i);
+            std::string chara_str;
+            chara_str = chara_str + char('A' + i);
             auto fnc = [this](int i_){
                 return [i_, this](const geometry_msgs::msg::Pose & msg) -> void{     
                     this->vsl_pos[i_] = msg.position;
