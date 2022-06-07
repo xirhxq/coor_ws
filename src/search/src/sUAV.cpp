@@ -14,28 +14,36 @@
 #include "geometry_msgs/msg/pose.hpp"
 typedef geometry_msgs::msg::Point Point;
 
+#define VESSEL_NUM 7
+
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 int sUAV_id;
 
 typedef enum TASK_CODE{
+    INIT,
     TAKEOFF,
     SEARCH,
-    MAP
+    MAP,
+    HOLD,
+    LAND
 } STATE_CODE;
 
 class sUAV : public rclcpp::Node {
 public:
-    Point UAV_pos, sat_vel;
-    geometry_msgs::msg::Twist UAV_vel;
+    Point UAV_pos, sat_vel, USV_pos, vsl_pos[VESSEL_NUM], takeoff_point;
+    geometry_msgs::msg::Twist UAV_vel, USV_vel, vsl_vel[VESSEL_NUM];
     double UAV_Euler[3];
     double R_e2b[3][3];
     double air_pressure;
-    double task_time;
+    double task_time, hold_time, hold_duration = 10.0;
     STATE_CODE  task_state;
     std::vector<Point> search_tra;
-    int loop, tra_finish;
+    int loop, search_tra_finish, vsl_id;
+    std::vector<Point> map_tra;
+    int map_tra_finish;
+    
 
     sUAV(char *name) : Node("sUAV_" + std::string(name)) {
         sUAV_id = std::atoi(name);
@@ -48,18 +56,35 @@ public:
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
                 "/model/quadrotor_" + std::to_string(sUAV_id) + "/world_pose", 10,
                 std::bind(&sUAV::nav_callback, this, _1));
+        usv_sub = this->create_subscription<geometry_msgs::msg::Pose>(
+                "/model/usv/world_pose", 10,
+                std::bind(&sUAV::usv_pose_callback, this, _1));
+        for (int i = 0; i < VESSEL_NUM; i++){
+            std::string chara_str = "" + char('A' + i);
+            auto fnc = [this](int i_){
+                return [i_, this](const geometry_msgs::msg::Pose & msg) -> void{     
+                    this->vsl_pos[i_] = msg.position;
+                    set_value(this->vsl_vel[i_].linear, msg.orientation);
+                };
+            };
+            vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
+                    "/model/Vessel_" + chara_str + "/world_pose", 10,
+                    fnc(i));
+                    // std::bind(&sUAV::vsl_pose_callback, this, _1));
+        }
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
         timer_ = this->create_wall_timer(500ms, std::bind(&sUAV::timer_callback, this));
-        sat_vel.x = 20;
-        sat_vel.y = 20;
-        sat_vel.z = 2;
+        sat_vel.x = 15;
+        sat_vel.y = 15;
+        sat_vel.z = 5;
         loop = 1;
-        double search_forward_y = (std::abs (sUAV_id - 5.5) * 300 - 75) * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_y = (std::abs (sUAV_id - 5.5) * 300 + 75) * ((sUAV_id > 5) * 2 - 1);
-        double search_forward_x = -1300;
+        double search_single_width = 300, search_signle_depth = 150;
+        double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
+        double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -1450;
-        double search_height = 50;
+        double search_forward_x = search_backward_x + search_signle_depth;
+        double search_height = 30;
         for (int i = 1; i <= loop; i++){
             search_tra.push_back(new_point(search_backward_x, search_forward_y, search_height));
             search_tra.push_back(new_point(search_forward_x, search_forward_y, search_height));
@@ -121,6 +146,16 @@ private:
         set_value(this->UAV_vel.linear, msg.orientation);
     }
 
+    void usv_pose_callback(const geometry_msgs::msg::Pose & msg){
+        this->USV_pos = msg.position;
+        set_value(this->USV_vel.linear, msg.orientation);
+    }
+
+    void vsl_pose_callback(const geometry_msgs::msg::Pose & msg, int i_){
+        this->vsl_pos[i_] = msg.position;
+        set_value(this->vsl_vel[i_].linear, msg.orientation);
+    }
+
     void update_time(){
         rclcpp::Time time_now = this->get_clock()->now();
         double currTimeSec = time_now.seconds() - task_begin_time.seconds();
@@ -136,9 +171,19 @@ private:
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2) + std::pow(a.z - b.z, 2));
     }
 
+    template<typename T1, typename T2>
+    double dis_2d(T1 a, T2 b){
+        return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
+    }
+
     template<typename T>
     bool is_near(T a, double r){
         return dis(a, UAV_pos) <= r;
+    }
+
+    template<typename T>
+    bool is_near_2d(T a, double r){
+        return dis_2d(a, UAV_pos) <= r;
     }
 
     template<typename T1, typename T2>
@@ -180,6 +225,16 @@ private:
         printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", x, y, z);
         vel_cmd_pub->publish(cmd);
     }
+
+    template<typename T1, typename T2>
+    void UAV_Control_to_point_while_facing(T1 a, T2 b){
+        geometry_msgs::msg::Twist cmd;
+        set_value(cmd.linear, point_minus(a, UAV_pos));
+        cmd.angular.z = atan2(b.y - UAV_pos.y, b.x - UAV_pos.x);
+        saturation(cmd.linear);
+        printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        vel_cmd_pub->publish(cmd);
+    }
     
     template<typename T1, typename T2>
     T1 point_minus(T1 a, T2 b){
@@ -187,6 +242,15 @@ private:
         res.x = a.x - b.x;
         res.y = a.y - b.y;
         res.z = a.z - b.z;
+        return res;
+    }    
+
+    template<typename T1, typename T2>
+    T1 point_plus(T1 a, T2 b){
+        T1 res = a;
+        res.x = a.x + b.x;
+        res.y = a.y + b.y;
+        res.z = a.z + b.z;
         return res;
     }
 
@@ -197,6 +261,11 @@ private:
         UAV_Control(point_minus(ctrl_cmd, UAV_pos));
     }
 
+    void StepInit(){
+        set_value(takeoff_point, UAV_pos);
+        task_state = TAKEOFF;
+    }
+
 
     void StepTakeoff(){
         UAV_Control_to_Point(search_tra[0]);
@@ -204,35 +273,68 @@ private:
         if (is_near(search_tra[0], 1)){
             printf("Takeoff Completed!\n");
             task_state = SEARCH;
-            tra_finish = 0;
+            search_tra_finish = 0;
         }
     }
 
     void StepSearch(){
      	printf("Search!!!\n");
-        UAV_Control_to_Point(search_tra[tra_finish]);
-        if (is_near(search_tra[tra_finish], 1)){
-            tra_finish++;
-            printf("#%d Trajectory Point Arrived!\n", tra_finish);
-            if (tra_finish == search_tra.size()){
+        UAV_Control_to_Point(search_tra[search_tra_finish]);
+        if (is_near(search_tra[search_tra_finish], 1)){
+            search_tra_finish++;
+            printf("#%d Trajectory Point Arrived!\n", search_tra_finish);
+            if (search_tra_finish == int(search_tra.size())){
                 printf("Search Completed!\n");
-                tra_finish = 0;
+                search_tra_finish = 0;
                 task_state = MAP;
+                map_tra_finish = 0;
+            }
+        }
+        for (int i = 0; i < VESSEL_NUM; i++){
+            if (is_near_2d(vsl_pos[i], 30)){
+                printf("Got Vessel %d!\n", i);
+                vsl_id = i;
+                search_tra_finish = 0;
+                task_state = MAP;
+                map_tra_finish = 0;
             }
         }
     }
 
     void StepMap(){
      	printf("MAP!!!\n");
-        UAV_Control(0, 0, 0);
+        UAV_Control_to_point_while_facing(map_tra[map_tra_finish], vsl_pos[vsl_id]);
+        if (is_near(map_tra[map_tra_finish], 1)){
+            map_tra_finish++;
+            printf("#%d Map Point Arrived!\n", map_tra_finish);
+            if (map_tra_finish == int(map_tra.size())){
+                printf("Map Completed!\n");
+                map_tra_finish = 0;
+                hold_time = task_time;
+                task_state = HOLD;
+            }
+        }
     }
     
     void StepHold(){
+        printf("Hold!!!\n");
         UAV_Control(0, 0, 0);
+        if (task_time - hold_time >= hold_duration){
+            printf("Hold %.2lf seconds completed!\n", hold_duration);
+        }
+    }
+
+    void StepLand(){
+        UAV_Control_to_Point(takeoff_point);
     }
 
     void timer_callback() {
+        update_time();
         switch (task_state){
+            case INIT:{
+                StepInit();
+                break;
+            }
             case TAKEOFF:{
                 StepTakeoff();
                 break;
@@ -243,6 +345,14 @@ private:
             }
             case MAP:{
                 StepMap();
+                break;
+            }
+            case HOLD:{
+                StepHold();
+                break;
+            }
+            case LAND:{
+                StepLand();
                 break;
             }
             default:{
@@ -256,7 +366,7 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub;
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, usv_sub, vsl_sub[VESSEL_NUM];
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
 };
 
