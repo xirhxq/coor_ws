@@ -228,9 +228,9 @@ private:
     template<typename T>
     void e2b(T &a){
         double xx = a.x, yy = a.y, zz = a.z;
-        a.x = dcm[0][0] * xx + dcm[0][1] * yy + dcm[0][2] * zz;
-        a.y = dcm[1][0] * xx + dcm[1][1] * yy + dcm[1][2] * zz;
-        a.z = dcm[2][0] * xx + dcm[2][1] * yy + dcm[2][2] * zz;
+        a.x = R_e2b[0][0] * xx + R_e2b[0][1] * yy + R_e2b[0][2] * zz;
+        a.y = R_e2b[1][0] * xx + R_e2b[1][1] * yy + R_e2b[1][2] * zz;
+        a.z = R_e2b[2][0] * xx + R_e2b[2][1] * yy + R_e2b[2][2] * zz;
     }
 
     template<typename T>
@@ -263,7 +263,7 @@ private:
         double des_ang = atan2(UAV_pos.y - b.y, UAV_pos.x - b.x);
         cmd.angular.z = des_ang - UAV_Euler[2];
         saturate_vel(cmd.linear);
-        saturate_yaw_rate(cmd.angular.z)
+        saturate_yaw_rate(cmd.angular.z);
         printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
@@ -289,7 +289,7 @@ private:
 
     template<typename T>
     void UAV_Control_to_Point(T ctrl_cmd){
-        UAV_Control(point_minus(ctrl_cmd, UAV_pos));
+        UAV_Control(point_minus(ctrl_cmd, UAV_pos), 0);
     }
 
     void StepInit(){
@@ -341,7 +341,7 @@ private:
             map_tra.push_back(new_point(std::cos(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
                                         std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
                                         30));
-            printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", map_tra[i].x, map_tra[i].y, map_tra[i].z);
+            printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", map_tra_finish, map_tra[i].x, map_tra[i].y, map_tra[i].z);
         }
     }
 
@@ -362,7 +362,7 @@ private:
     
     void StepHold(){
         printf("Hold!!!\n");
-        UAV_Control(0, 0, 0);
+        UAV_Control(0, 0, 0, 0);
         if (task_time - hold_time >= hold_duration){
             printf("Hold %.2lf seconds completed!\n", hold_duration);
             task_state = LAND;
