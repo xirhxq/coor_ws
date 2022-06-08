@@ -46,6 +46,7 @@ public:
     std::vector<Point> map_tra;
     int map_tra_finish;
     double map_init_theta;
+    double sat_yaw_rate;
     
 
     sUAV(char *name) : Node("sUAV_" + std::string(name)) {
@@ -74,7 +75,7 @@ public:
             vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
                     "/model/Vessel_" + chara_str + "/world_pose", 10,
                     fnc(i));
-                    // std::bind(&sUAV::vsl_pose_callback, this, _1));
+                    // std::bind(&sUAV::vsl_pose_callback, this, _1, i));
         }
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
@@ -82,6 +83,7 @@ public:
         sat_vel.x = 5;
         sat_vel.y = 5;
         sat_vel.z = 2;
+        sat_yaw_rate = 30 * PI / 180;
         loop = 1;
         double search_single_width = 100, search_signle_depth = 150;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
@@ -213,29 +215,44 @@ private:
     }
 
     template<typename T>
-    void saturation(T &a){
+    void saturate_vel(T &a){
         a.x = LimitValue(a.x, sat_vel.x);
         a.y = LimitValue(a.y, sat_vel.y);
         a.z = LimitValue(a.z, sat_vel.z);
     }
 
+    void saturate_yaw_rate(double &a){
+        a = LimitValue(a, sat_yaw_rate);
+    }
+    
     template<typename T>
-    void UAV_Control(T ctrl_cmd){
+    void e2b(T &a){
+        double xx = a.x, yy = a.y, zz = a.z;
+        a.x = dcm[0][0] * xx + dcm[0][1] * yy + dcm[0][2] * zz;
+        a.y = dcm[1][0] * xx + dcm[1][1] * yy + dcm[1][2] * zz;
+        a.z = dcm[2][0] * xx + dcm[2][1] * yy + dcm[2][2] * zz;
+    }
+
+    template<typename T>
+    void UAV_Control(T ctrl_cmd, double yaw_rate){
         geometry_msgs::msg::Twist cmd;
+        cmd.angular.z = yaw_rate;
         set_value(cmd.linear, ctrl_cmd);
-        saturation(cmd.linear);
+        saturate_vel(cmd.linear);
         printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        e2b(cmd.linear);
         vel_cmd_pub->publish(cmd);
     }
 
-    void UAV_Control(double x, double y, double z){
+    void UAV_Control(double x, double y, double z, double yaw_rate){
         geometry_msgs::msg::Twist cmd;
         cmd.linear.x = x;
         cmd.linear.y = y;
         cmd.linear.z = z;
-        saturation(cmd.linear);
-        printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", x, y, z);
-        vel_cmd_pub->publish(cmd);
+        UAV_Control(cmd.linear, yaw_rate);
+        // saturation(cmd.linear);
+        // printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", x, y, z);
+        // vel_cmd_pub->publish(cmd);
     }
 
     template<typename T1, typename T2>
@@ -243,8 +260,10 @@ private:
         printf("Control to Point (%.2lf, %.2lf, %.2lf) while facing (%.2lf, %.2lf, %.2lf)\n", a.x, a.y, a.z, b.x, b.y, b.z);
         geometry_msgs::msg::Twist cmd;
         set_value(cmd.linear, point_minus(a, UAV_pos));
-        // cmd.angular.z = atan2(UAV_pos.y - b.y, UAV_pos.x - b.x);
-        saturation(cmd.linear);
+        double des_ang = atan2(UAV_pos.y - b.y, UAV_pos.x - b.x);
+        cmd.angular.z = des_ang - UAV_Euler[2];
+        saturate_vel(cmd.linear);
+        saturate_yaw_rate(cmd.angular.z)
         printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
@@ -270,7 +289,6 @@ private:
 
     template<typename T>
     void UAV_Control_to_Point(T ctrl_cmd){
-    	printf("Now UAV @ %.6lf %.6lf %.6lf\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
         UAV_Control(point_minus(ctrl_cmd, UAV_pos));
     }
 
