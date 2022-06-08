@@ -79,11 +79,11 @@ public:
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
         timer_ = this->create_wall_timer(500ms, std::bind(&sUAV::timer_callback, this));
-        sat_vel.x = 15;
-        sat_vel.y = 15;
-        sat_vel.z = 5;
+        sat_vel.x = 5;
+        sat_vel.y = 5;
+        sat_vel.z = 2;
         loop = 1;
-        double search_single_width = 300, search_signle_depth = 150;
+        double search_single_width = 100, search_signle_depth = 150;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -1450;
@@ -240,11 +240,13 @@ private:
 
     template<typename T1, typename T2>
     void UAV_Control_to_point_while_facing(T1 a, T2 b){
+        printf("Control to Point (%.2lf, %.2lf, %.2lf) while facing (%.2lf, %.2lf, %.2lf)\n", a.x, a.y, a.z, b.x, b.y, b.z);
         geometry_msgs::msg::Twist cmd;
         set_value(cmd.linear, point_minus(a, UAV_pos));
-        cmd.angular.z = atan2(b.y - UAV_pos.y, b.x - UAV_pos.x);
+        // cmd.angular.z = atan2(UAV_pos.y - b.y, UAV_pos.x - b.x);
         saturation(cmd.linear);
         printf("UAV vel cmd: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
     }
     
@@ -314,11 +316,14 @@ private:
 
     void StepMapInit(){
         map_tra_finish = 0;
-        map_init_theta = atan2(vsl_pos[vsl_id].y - UAV_pos.y, vsl_pos[vsl_id].x - UAV_pos.x);
-        for (int i = 0; i < 100; i++){
-            map_tra.push_back(new_point(std::cos(1.0 * i / 100 * 2 * PI + map_init_theta) * 30,
-                                        std::sin(1.0 * i / 100 * 2 * PI + map_init_theta) * 30,
+        map_init_theta = atan2(UAV_pos.y - vsl_pos[vsl_id].y, UAV_pos.x - vsl_pos[vsl_id].x);
+        printf("theta_init = %.2lf\n", map_init_theta * 180 / PI);
+        const int MAP_POINT = 10;
+        for (int i = 0; i < MAP_POINT; i++){
+            map_tra.push_back(new_point(std::cos(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
+                                        std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
                                         30));
+            printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", map_tra[i].x, map_tra[i].y, map_tra[i].z);
         }
     }
 
@@ -342,6 +347,7 @@ private:
         UAV_Control(0, 0, 0);
         if (task_time - hold_time >= hold_duration){
             printf("Hold %.2lf seconds completed!\n", hold_duration);
+            task_state = LAND;
         }
     }
 
