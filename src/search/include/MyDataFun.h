@@ -47,7 +47,7 @@ namespace MyDataFun{
 
 
     template<typename T1, typename T2>
-    T1 point_minus(T1 a, T2 b){
+    T1 minus(T1 a, T2 b){
         T1 res = a;
         res.x = a.x - b.x;
         res.y = a.y - b.y;
@@ -56,7 +56,7 @@ namespace MyDataFun{
     }    
 
     template<typename T1, typename T2>
-    T1 point_plus(T1 a, T2 b){
+    T1 plus(T1 a, T2 b){
         T1 res = a;
         res.x = a.x + b.x;
         res.y = a.y + b.y;

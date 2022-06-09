@@ -79,14 +79,15 @@ public:
     // [StepMap] Vessel ID to map
     int vsl_id;
 
-    // [StepMap] Map trajectory radius
+    // [StepMap] Map trajectory radius & Map Lateral velocity & Map Height
     const double MAP_TRA_RADIUS = 50;
+    const double MAP_Y_VEL = 5;
+    const double MAP_TRA_HEIGHT = 30;
 
     // [StepMap] Relative trajectory of map & Trajectory points finished & Initial relative yaw
     std::vector<Point> map_tra;
     int map_tra_finish;
     double map_init_theta;
-    
 
     sUAV(char *name) : Node("sUAV_" + std::string(name)) {
         sUAV_id = std::atoi(name);
@@ -199,51 +200,95 @@ private:
     }
 
     template<typename T>
-    void UAV_Control(T ctrl_cmd, double yaw_rate){
+    void UAV_Control_earth(T ctrl_cmd, double yaw_rate){
         geometry_msgs::msg::Twist cmd;
         cmd.angular.z = yaw_rate;
         MyDataFun::set_value(cmd.linear, ctrl_cmd);
-        saturate_vel(cmd.linear);
         printf("UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         e2b(cmd.linear);
         printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_vel(cmd.linear);
+        saturate_yaw_rate(cmd.angular.z);
+        printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
     }
 
-    void UAV_Control(double x, double y, double z, double yaw_rate){
+    void UAV_Control_earth(double x, double y, double z, double yaw_rate){
         geometry_msgs::msg::Twist cmd;
         cmd.linear.x = x;
         cmd.linear.y = y;
         cmd.linear.z = z;
-        UAV_Control(cmd.linear, yaw_rate);
+        UAV_Control_earth(cmd.linear, yaw_rate);
+    }
+
+    template<typename T>
+    void UAV_Control_body(T ctrl_cmd, double yaw_rate){
+        geometry_msgs::msg::Twist cmd;
+        cmd.angular.z = yaw_rate;
+        MyDataFun::set_value(cmd.linear, ctrl_cmd);
+        printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_vel(cmd.linear);
+        vel_cmd_pub->publish(cmd);
+    }
+
+    void UAV_Control_body(double x, double y, double z, double yaw_rate){
+        geometry_msgs::msg::Twist cmd;
+        cmd.linear.x = x;
+        cmd.linear.y = y;
+        cmd.linear.z = z;
+        UAV_Control_body(cmd.linear, yaw_rate);
     }
 
     template<typename T1, typename T2>
     void UAV_Control_to_point_while_facing(T1 a, T2 b){
         printf("Control to Point (%.2lf, %.2lf, %.2lf) while facing (%.2lf, %.2lf, %.2lf)\n", a.x, a.y, a.z, b.x, b.y, b.z);
         geometry_msgs::msg::Twist cmd;
-        MyDataFun::set_value(cmd.linear, MyDataFun::point_minus(a, UAV_pos));
+        MyDataFun::set_value(cmd.linear, MyDataFun::minus(a, UAV_pos));
         double des_yaw = atan2(b.y - UAV_pos.y, b.x - UAV_pos.x);
         printf("Now yaw is %.2lf while desired yaw is %.2lf\n", UAV_Euler[2] * RAD2DEG, des_yaw * RAD2DEG);
         cmd.angular.z = des_yaw - UAV_Euler[2];
-        saturate_vel(cmd.linear);
-        saturate_yaw_rate(cmd.angular.z);
         printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
         printf("UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         e2b(cmd.linear);
         printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_vel(cmd.linear);
+        saturate_yaw_rate(cmd.angular.z);
+        printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
     }
-    
 
+    template<typename T>
+    void UAV_Control_circle_while_facing(T a){
+        printf("Control in circle while facing (%.2lf, %.2lf, %.2lf)\n", a.x, a.y, a.z);
+        geometry_msgs::msg::Twist cmd;
+        double dis2vsl = sqrt(pow(a.y - UAV_pos.y, 2) + pow(a.x - UAV_pos.x, 2));
+        printf("Distance 2 Vessel: %.2lf\n", dis2vsl);
+        cmd.linear.x = (dis2vsl - MAP_TRA_RADIUS) * 0.2;
+        cmd.linear.y = MAP_Y_VEL;
+        cmd.linear.z = (MAP_TRA_HEIGHT - UAV_pos.z) * 0.2;
+        double des_yaw = atan2(a.y - UAV_pos.y, a.x - UAV_pos.x);
+        printf("Now yaw is %.2lf while desired yaw is %.2lf\n", UAV_Euler[2] * RAD2DEG, des_yaw * RAD2DEG);
+        cmd.angular.z = des_yaw - UAV_Euler[2];
+        printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
+        printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_vel(cmd.linear);
+        saturate_yaw_rate(cmd.angular.z);
+        printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
+        vel_cmd_pub->publish(cmd);
+
+    }
+    
     template<typename T>
     void UAV_Control_to_Point(T ctrl_cmd){
         printf("Control to Point (%.2lf, %.2lf, %.2lf)\n", ctrl_cmd.x, ctrl_cmd.y, ctrl_cmd.z);
-        UAV_Control(MyDataFun::point_minus(ctrl_cmd, UAV_pos), 0);
+        UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), 0);
     }
 
     void StepInit(){
-        UAV_Control(0, 0, 0, 0);
+        UAV_Control_earth(0, 0, 0, 0);
         MyDataFun::set_value(takeoff_point, UAV_pos);
         printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
         rclcpp::Time time_now = this->get_clock()->now();
@@ -303,8 +348,9 @@ private:
 
     void StepMap(){
      	printf("MAP!!!\n");
-        UAV_Control_to_point_while_facing(MyDataFun::point_plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
-        if (is_near(MyDataFun::point_plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), 1)){
+        // UAV_Control_to_point_while_facing(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
+        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
+        if (is_near(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), 1)){
             map_tra_finish++;
             printf("#%d Map Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_tra_finish);
             if (map_tra_finish == int(map_tra.size())){
@@ -318,7 +364,7 @@ private:
     
     void StepHold(){
         printf("Hold!!!\n");
-        UAV_Control(0, 0, 0, 0);
+        UAV_Control_earth(0, 0, 0, 0);
         if (task_time - hold_time >= hold_duration){
             printf("Hold %.2lf seconds completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", hold_duration);
             task_state = LAND;
