@@ -29,6 +29,7 @@ typedef enum TASK_CODE{
     INIT,
     TAKEOFF,
     SEARCH,
+    PREMAP,
     MAP,
     HOLD,
     LAND
@@ -80,9 +81,9 @@ public:
     int vsl_id;
 
     // [StepMap] Map trajectory radius & Map Lateral velocity & Map Height
-    const double MAP_TRA_RADIUS = 50;
-    const double MAP_Y_VEL = 5;
-    const double MAP_TRA_HEIGHT = 30;
+    const double MAP_Y_VEL = 3;
+    const double MAP_TRA_HEIGHT = 15;
+    const double MAP_TRA_RADIUS = 15 * tan(30 * DEG2RAD);
 
     // [StepMap] Relative trajectory of map & Trajectory points finished & Initial relative yaw
     std::vector<Point> map_tra;
@@ -117,7 +118,7 @@ public:
         }
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
-        timer_ = this->create_wall_timer(500ms, std::bind(&sUAV::timer_callback, this));
+        timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
         sat_vel.x = 5;
         sat_vel.y = 5;
         sat_vel.z = 2;
@@ -282,9 +283,17 @@ private:
     }
     
     template<typename T>
-    void UAV_Control_to_Point(T ctrl_cmd){
+    void UAV_Control_to_Point_earth(T ctrl_cmd){
         printf("Control to Point (%.2lf, %.2lf, %.2lf)\n", ctrl_cmd.x, ctrl_cmd.y, ctrl_cmd.z);
         UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), 0);
+    }
+
+    void UAV_Control_to_Point_earth(double x, double y, double z){
+        Point p;
+        p.x = x;
+        p.y = y;
+        p.z = z;
+        UAV_Control_to_Point_earth(p);
     }
 
     void StepInit(){
@@ -300,7 +309,7 @@ private:
     }
 
     void StepTakeoff(){
-        UAV_Control_to_Point(search_tra[0]);
+        UAV_Control_to_Point_earth(search_tra[0]);
      	printf("Takeoff!!!\n");
         if (is_near(search_tra[0], 1)){
             printf("Takeoff Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
@@ -311,7 +320,7 @@ private:
 
     void StepSearch(){
      	printf("Search!!!\n");
-        UAV_Control_to_Point(search_tra[search_tra_finish]);
+        UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
         if (is_near(search_tra[search_tra_finish], 1)){
             search_tra_finish++;
             printf("#%d Trajectory Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", search_tra_finish);
@@ -327,7 +336,7 @@ private:
                 printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
                 vsl_id = i;
                 search_tra_finish = 0;
-                task_state = MAP;
+                task_state = PREMAP;
                 StepMapInit();
             }
         }
@@ -343,6 +352,17 @@ private:
                                         std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * MAP_TRA_RADIUS,
                                         30));
             printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", i, map_tra[i].x, map_tra[i].y, map_tra[i].z);
+        }
+    }
+
+    void StepPremap(){
+        printf("PREMAP!!!\n");
+        UAV_Control_to_Point_earth(vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(map_init_theta),
+                                   vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(map_init_theta), 
+                                   MAP_TRA_HEIGHT);
+        if (abs(UAV_pos.z - MAP_TRA_HEIGHT) <= 1){
+            printf("Premap completed!!!!!!!!!!!!!!!!!!!!!!\n");
+            task_state = MAP;
         }
     }
 
@@ -372,7 +392,7 @@ private:
     }
 
     void StepLand(){
-        UAV_Control_to_Point(takeoff_point);
+        UAV_Control_to_Point_earth(takeoff_point);
     }
 
     void timer_callback() {
@@ -400,6 +420,10 @@ private:
             }
             case MAP:{
                 StepMap();
+                break;
+            }
+            case PREMAP:{
+                StepPremap();
                 break;
             }
             case HOLD:{
