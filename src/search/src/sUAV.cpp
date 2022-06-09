@@ -62,6 +62,9 @@ public:
 
     // Time duration from takeoff
     double task_time;
+
+    // Task begin time
+    double task_begin_time;
     
     // [StepHold] Time from start & Preset time duration
     double hold_time, hold_duration = 10.0;
@@ -75,6 +78,9 @@ public:
     
     // [StepMap] Vessel ID to map
     int vsl_id;
+
+    // [StepMap] Map trajectory radius
+    const double MAP_TRA_RADIUS = 50;
 
     // [StepMap] Relative trajectory of map & Trajectory points finished & Initial relative yaw
     std::vector<Point> map_tra;
@@ -189,8 +195,7 @@ private:
 
     void update_time(){
         rclcpp::Time time_now = this->get_clock()->now();
-        double currTimeSec = time_now.seconds() - task_begin_time.seconds();
-        task_time =  currTimeSec;
+        task_time = time_now.seconds() - task_begin_time;
     }
 
     double LimitValue(double x, double sat){
@@ -322,8 +327,11 @@ private:
     }
 
     void StepInit(){
+        UAV_Control(0, 0, 0, 0);
         set_value(takeoff_point, UAV_pos);
         printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
+        rclcpp::Time time_now = this->get_clock()->now();
+        task_begin_time = time_now.seconds();
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
             printf("Get Ground Truth Position!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = TAKEOFF;
@@ -355,7 +363,7 @@ private:
             }
         }
         for (int i = 0; i < VESSEL_NUM; i++){
-            if (is_near_2d(vsl_pos[i], 30)){
+            if (is_near_2d(vsl_pos[i], MAP_TRA_RADIUS)){
                 printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
                 vsl_id = i;
                 search_tra_finish = 0;
@@ -371,8 +379,8 @@ private:
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
         const int MAP_POINT = 10;
         for (int i = 0; i < MAP_POINT; i++){
-            map_tra.push_back(new_point(std::cos(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
-                                        std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * 30,
+            map_tra.push_back(new_point(std::cos(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * MAP_TRA_RADIUS,
+                                        std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * MAP_TRA_RADIUS,
                                         30));
             printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", i, map_tra[i].x, map_tra[i].y, map_tra[i].z);
         }
@@ -409,7 +417,7 @@ private:
     void timer_callback() {
         update_time();
         printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
-        printf("Time: %.2lf\n", task_time - task_begin_time);
+        printf("Time: %.2lf\n", task_time);
         printf("Me @ (%.2lf, %.2lf, %.2lf)\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
         printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
@@ -448,7 +456,6 @@ private:
         }
     }
 
-    rclcpp::Time task_begin_time;
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
