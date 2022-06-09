@@ -418,12 +418,12 @@ private:
                 StepSearch();
                 break;
             }
-            case MAP:{
-                StepMap();
-                break;
-            }
             case PREMAP:{
                 StepPremap();
+                break;
+            }
+            case MAP:{
+                StepMap();
                 break;
             }
             case HOLD:{
