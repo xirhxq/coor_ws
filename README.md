@@ -23,6 +23,13 @@ ros2 run ros_ign_bridge my_bridge
 ros2 run search sUAV 5
 ```
 
+# Or we can start everything by Shell
+
+```bash
+./start_everything.sh 1 2 3 4 5 6 7 8 9 10
+```
+
+
 # What we did to the code of mbzirc_ws
 
 1. Change `mass` of small object from 3kg to 1kg 
