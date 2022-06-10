@@ -85,9 +85,7 @@ public:
     const double MAP_TRA_HEIGHT = 15;
     const double MAP_TRA_RADIUS = 15 * tan(30 * DEG2RAD);
 
-    // [StepMap] Relative trajectory of map & Trajectory points finished & Initial relative yaw
-    std::vector<Point> map_tra;
-    int map_tra_finish;
+    // [StepMap] Initial relative yaw
     double map_init_theta;
 
     sUAV(char *name) : Node("sUAV_" + std::string(name)) {
@@ -124,10 +122,10 @@ public:
         sat_vel.z = 2;
         sat_yaw_rate = 30 * DEG2RAD;
         loop = 1;
-        double search_single_width = 100, search_signle_depth = 150;
+        double search_single_width = 50, search_signle_depth = 150;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_x = -1450;
+        double search_backward_x = -1500;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 30;
         for (int i = 1; i <= loop; i++){
@@ -325,9 +323,9 @@ private:
             search_tra_finish++;
             printf("#%d Trajectory Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", search_tra_finish);
             if (search_tra_finish == int(search_tra.size())){
-                printf("Search Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                printf("Search Failed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 search_tra_finish = 0;
-                task_state = MAP;
+                task_state = LAND;
                 StepMapInit();
             }
         }
@@ -343,16 +341,8 @@ private:
     }
 
     void StepMapInit(){
-        map_tra_finish = 0;
         map_init_theta = atan2(UAV_pos.y - vsl_pos[vsl_id].y, UAV_pos.x - vsl_pos[vsl_id].x);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
-        const int MAP_POINT = 10;
-        for (int i = 0; i <= MAP_POINT; i++){
-            map_tra.push_back(MyDataFun::new_point(std::cos(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * MAP_TRA_RADIUS,
-                                        std::sin(1.0 * i / MAP_POINT * 2 * PI + map_init_theta) * MAP_TRA_RADIUS,
-                                        30));
-            printf("Map Tra #%d: %.2lf, %.2lf, %.2lf\n", i, map_tra[i].x, map_tra[i].y, map_tra[i].z);
-        }
     }
 
     void StepPremap(){
@@ -370,15 +360,8 @@ private:
      	printf("MAP!!!\n");
         // UAV_Control_to_point_while_facing(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
         UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
-        if (is_near(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), 1)){
-            map_tra_finish++;
-            printf("#%d Map Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_tra_finish);
-            if (map_tra_finish == int(map_tra.size())){
-                printf("Map Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                map_tra_finish = 0;
-                hold_time = task_time;
-                task_state = HOLD;
-            }
+        if (0){
+            task_state = HOLD;
         }
     }
     
