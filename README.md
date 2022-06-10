@@ -22,3 +22,11 @@ ros2 run ros_ign_bridge my_bridge
 ```bash
 ros2 run search sUAV 5
 ```
+
+# What we did to the code of mbzirc_ws
+
+1. Change `mass` of small object from 3kg to 1kg 
+   (in `/.ignition/fuel/fuel.ignitionrobotics.org/openrobotics/models/small case/2/model.sdf`)
+
+2. Change `maxRotVelocity` from 800 to 1800 
+   (in `/mbzirc_ws/src/mbzirc/mbzirc_ign/models/mbzirc_quadrotor/model.sdf.erb`)
