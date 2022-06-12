@@ -10,7 +10,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-
+find_package(target_bbox_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -30,7 +30,7 @@ include_directories(
 
 
 add_executable(sUAV src/sUAV.cpp)
-ament_target_dependencies(sUAV rclcpp sensor_msgs nav_msgs)
+ament_target_dependencies(sUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 
 install(TARGETS
   sUAV

@@ -33,7 +33,7 @@ namespace MyMathFun{
         return std::min(std::abs(sat), std::max(-std::abs(sat), x));
     }
     
-    /* solve target postion from zc
+    //solve target angle from zc
 	void angle_transf(double euler[3], double bias, double pixel[2],double q[3])
 	{
 		//q_alpha: pitch->pixel[1]
@@ -48,6 +48,6 @@ namespace MyMathFun{
 		q[1] = asin(sin(theta)*cos(pixel[1])*cos(pixel[0])+cos(theta)*cos(euler[0])*sin(pixel[1])+cos(theta)*sin(euler[0])*cos(pixel[1])*sin(pixel[0]));
 		q[2] = atan2(-M1,N1);
 	}
-    */
+
 }
 	

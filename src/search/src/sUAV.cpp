@@ -12,6 +12,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "target_bbox_msgs/msg/bounding_boxes.hpp"
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
@@ -52,13 +53,14 @@ public:
     // Position of Target Vessel A-G
     Point vsl_pos[VESSEL_NUM];
 
-    // Information Target Vessel Information of Vison
+    // Information Target Vessel Information of Vision
     double vis_vsl_pix[2];
     int vis_vsl_flag;
-    char vis_vsl_id;
+    std::string vis_vsl_id;
     double q_LOS_v[3];
     double pos_err_v[3];
-    double int_map_pos[3];
+    Point int_map_pos;
+    Point vis_vsl_pos;
 
     // Position of USV
     Point USV_pos;
@@ -102,11 +104,8 @@ public:
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/imu/data", 10,
                 std::bind(&sUAV::imu_callback, this, _1));
-        /*
-        // Vision
 		det_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
-    	det_sub_topic, 10, std::bind(&sUAV::det_callback, this, _1));
-        */
+    	"/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/air_pressure", 10,
                 std::bind(&sUAV::alt_callback, this, _1));
@@ -141,7 +140,7 @@ public:
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -1500;
         double search_forward_x = search_backward_x + search_signle_depth;
-        double search_height = 30;
+        double search_height = 50;
         for (int i = 1; i <= loop; i++){
             search_tra.push_back(MyDataFun::new_point(search_backward_x, search_forward_y, search_height));
             search_tra.push_back(MyDataFun::new_point(search_forward_x, search_forward_y, search_height));
@@ -355,42 +354,47 @@ private:
                 StepMapInit();
             }
         }
-        for (int i = 0; i < VESSEL_NUM; i++){
-            if (is_near_2d(vsl_pos[i], MAP_TRA_RADIUS)){
-                printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
-                vsl_id = i;
-                search_tra_finish = 0;
-                task_state = PREMAP;
-                StepMapInit();
-            }
-        }
-        
-        // if (vis_vsl_flag == 1){
-        //     printf("Got %s !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", vis_vsl_id);
-        // 	vsl_id = 1;
-        //     search_tra_finish = 0;
-        // 	task_state = TOMAP;
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     if (is_near_2d(vsl_pos[i], MAP_TRA_RADIUS)){
+        //         printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
+        //         vsl_id = i;
+        //         search_tra_finish = 0;
+        //         task_state = PREMAP;
+        //         StepMapInit();
+        //     }
         // }
+        
+        if (vis_vsl_id[vis_vsl_id.length() - 1] == 'A' || vis_vsl_id[vis_vsl_id.length() - 1] == 'a'){
+            printf("Got Vessel_A !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        	vsl_id = 0;
+            search_tra_finish = 0;
+        	task_state = TOMAP;
+        }
         
     }
 	
 	void StepToMap(){
-        angle_transf(UAV_Euler,rad(30),vis_vsl_pix,q_LOS_v);
-        pos_err_v[2] = -UAV_pos[2];	
+        MyMathFun::angle_transf(UAV_Euler, 30 * DEG2RAD, vis_vsl_pix, q_LOS_v);
+        printf("qlos: (%.2lf, %.2lf)\n", q_LOS_v[1] * RAD2DEG, q_LOS_v[2] * RAD2DEG);
+        pos_err_v[2] = -UAV_pos.z;	
 		pos_err_v[0] = (-pos_err_v[2]/tan(q_LOS_v[1]))*cos(q_LOS_v[2]);
 		pos_err_v[1] = (-pos_err_v[2]/tan(q_LOS_v[1]))*sin(q_LOS_v[2]);
-        vis_vsl_pos[0] = UAV_pos[0] + pos_err_v[0];
-        vis_vsl_pos[1] = UAV_pos[1] + pos_err_v[1];
-        vis_vsl_pos[2] = UAV_pos[2] + pos_err_v[2];
-        int_map_pos[0] = vis_vsl_pos[0] - pos_err_v[0]/2;
-        int_map_pos[1] = vis_vsl_pos[1] - pos_err_v[1]/2;
-        int_map_pos[2] = MAP_TRA_HEIGHT;
+        printf("Rel Pos of Target: (%.2lf, %.2lf, %.2lf)\n", pos_err_v[0], pos_err_v[1], pos_err_v[2]);
+        vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
+        vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
+        vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
+        printf("Vessel Pos (%.2lf, %.2lf, %.2lf)\n", vis_vsl_pos.x, vis_vsl_pos.y, vis_vsl_pos.z);
+        int_map_pos.x = vis_vsl_pos.x;
+        int_map_pos.y = vis_vsl_pos.y;
+        int_map_pos.z = MAP_TRA_HEIGHT;
+        printf("Initial Mapping Pos (%.2lf, %.2lf, %.2lf)\n", int_map_pos.x, int_map_pos.y, int_map_pos.z);
+        // UAV_Control_earth(0, 0, 0, 0);
         UAV_Control_to_point_while_facing(int_map_pos, vis_vsl_pos);
         // UAV_Control_to_Map_Pixel = (vis_vsl_pix);
         printf("Approaching to Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", vsl_id);
-		if (is_near_2d(vsl_pos[vsl_id], MAP_TRA_RADIUS)){
+		if (is_near_2d(vis_vsl_pos, 2 * MAP_TRA_RADIUS)){
             StepMapInit();
-            task_state = PREMAP;
+            task_state = MAP;
         }
 	}
 	
@@ -413,7 +417,7 @@ private:
     void StepMap(){
      	printf("MAP!!!\n");
         // UAV_Control_to_point_while_facing(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
-        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
+        UAV_Control_circle_while_facing(vis_vsl_pos);
         if (0){
             task_state = HOLD;
         }
@@ -437,11 +441,11 @@ private:
         printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
         printf("Time: %.2lf\n", task_time);
         printf("Me @ (%.2lf, %.2lf, %.2lf)\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
-        printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
-        printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
-        printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
-        printf("Transform Matrix: ------\n");
-        for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
+        // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
+        // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
+        // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
+        // printf("Transform Matrix: ------\n");
+        // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
         switch (task_state){
             case INIT:{
                 StepInit();
@@ -456,7 +460,7 @@ private:
                 break;
             }
             case TOMAP:{
-            	StepToMap()
+            	StepToMap();
             	break;
             }
             case PREMAP:{
@@ -486,6 +490,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, usv_sub, vsl_sub[VESSEL_NUM];
+    rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_sub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
 };
 
