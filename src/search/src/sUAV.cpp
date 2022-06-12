@@ -29,6 +29,7 @@ typedef enum TASK_CODE{
     INIT,
     TAKEOFF,
     SEARCH,
+    TOMAP,
     PREMAP,
     MAP,
     HOLD,
@@ -50,6 +51,14 @@ public:
 
     // Position of Target Vessel A-G
     Point vsl_pos[VESSEL_NUM];
+
+    // Information Target Vessel Information of Vison
+    double vis_vsl_pix[2];
+    int vis_vsl_flag;
+    char vis_vsl_id;
+    double q_LOS_v[3];
+    double pos_err_v[3];
+    double int_map_pos[3];
 
     // Position of USV
     Point USV_pos;
@@ -93,6 +102,11 @@ public:
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/imu/data", 10,
                 std::bind(&sUAV::imu_callback, this, _1));
+        /*
+        // Vision
+		det_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
+    	det_sub_topic, 10, std::bind(&sUAV::det_callback, this, _1));
+        */
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
                 "/quadrotor_" + std::to_string(sUAV_id) + "/air_pressure", 10,
                 std::bind(&sUAV::alt_callback, this, _1));
@@ -148,6 +162,18 @@ private:
         MyMathFun::quaternion_2_euler(q, this->UAV_Euler); 		// ENU
         MyMathFun::Euler_2_Dcm(this->UAV_Euler, this->R_e2b);		// Rotation Matrix: ENU to Body
     }
+
+	void det_callback(const target_bbox_msgs::msg::BoundingBoxes & msg){
+		if(msg.bounding_boxes.size()>0){
+	        vis_vsl_pix[0] = msg.bounding_boxes[0].x_center;
+			vis_vsl_pix[1] = msg.bounding_boxes[0].y_center;
+			vis_vsl_flag = msg.bounding_boxes[0].flag;
+			vis_vsl_id = msg.bounding_boxes[0].class_id;
+		}
+		else{
+			vis_vsl_flag = 0;
+		}
+	}
 
     void alt_callback(const sensor_msgs::msg::FluidPressure & msg){
         air_pressure = msg.fluid_pressure;
@@ -338,8 +364,36 @@ private:
                 StepMapInit();
             }
         }
+        
+        // if (vis_vsl_flag == 1){
+        //     printf("Got %s !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", vis_vsl_id);
+        // 	vsl_id = 1;
+        //     search_tra_finish = 0;
+        // 	task_state = TOMAP;
+        // }
+        
     }
-
+	
+	void StepToMap(){
+        angle_transf(UAV_Euler,rad(30),vis_vsl_pix,q_LOS_v);
+        pos_err_v[2] = -UAV_pos[2];	
+		pos_err_v[0] = (-pos_err_v[2]/tan(q_LOS_v[1]))*cos(q_LOS_v[2]);
+		pos_err_v[1] = (-pos_err_v[2]/tan(q_LOS_v[1]))*sin(q_LOS_v[2]);
+        vis_vsl_pos[0] = UAV_pos[0] + pos_err_v[0];
+        vis_vsl_pos[1] = UAV_pos[1] + pos_err_v[1];
+        vis_vsl_pos[2] = UAV_pos[2] + pos_err_v[2];
+        int_map_pos[0] = vis_vsl_pos[0] - pos_err_v[0]/2;
+        int_map_pos[1] = vis_vsl_pos[1] - pos_err_v[1]/2;
+        int_map_pos[2] = MAP_TRA_HEIGHT;
+        UAV_Control_to_point_while_facing(int_map_pos, vis_vsl_pos);
+        // UAV_Control_to_Map_Pixel = (vis_vsl_pix);
+        printf("Approaching to Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", vsl_id);
+		if (is_near_2d(vsl_pos[vsl_id], MAP_TRA_RADIUS)){
+            StepMapInit();
+            task_state = PREMAP;
+        }
+	}
+	
     void StepMapInit(){
         map_init_theta = atan2(UAV_pos.y - vsl_pos[vsl_id].y, UAV_pos.x - vsl_pos[vsl_id].x);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
@@ -400,6 +454,10 @@ private:
             case SEARCH:{
                 StepSearch();
                 break;
+            }
+            case TOMAP:{
+            	StepToMap()
+            	break;
             }
             case PREMAP:{
                 StepPremap();
