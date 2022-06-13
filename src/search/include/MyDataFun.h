@@ -1,6 +1,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include <cstring>
 
 typedef geometry_msgs::msg::Point Point;
 
@@ -41,6 +42,11 @@ namespace MyDataFun{
     }
 
     template<typename T1, typename T2>
+    double dissq(T1 a, T2 b){
+        return std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2) + std::pow(a.z - b.z, 2);
+    }
+
+    template<typename T1, typename T2>
     double dis_2d(T1 a, T2 b){
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
     }
@@ -61,6 +67,14 @@ namespace MyDataFun{
         res.x = a.x + b.x;
         res.y = a.y + b.y;
         res.z = a.z + b.z;
+        return res;
+    }
+
+    template<typename T>
+    std::string output_str(T a){
+        char s[50];
+        sprintf(s, "(%.2lf, %.2lf, %.2lf)", a.x, a.y, a.z);
+        std::string res(s);
         return res;
     }
 
