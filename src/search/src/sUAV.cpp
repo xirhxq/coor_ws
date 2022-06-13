@@ -12,12 +12,14 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "std_msgs/msg/int16.hpp"
 #include "target_bbox_msgs/msg/bounding_boxes.hpp"
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
 typedef geometry_msgs::msg::Point Point;
 
+#define UAV_NUM 10
 #define VESSEL_NUM 7
 
 using namespace geometry_msgs::msg;
@@ -30,8 +32,6 @@ typedef enum TASK_CODE{
     INIT,
     TAKEOFF,
     SEARCH,
-    TOMAP,
-    PREMAP,
     MAP,
     HOLD,
     LAND
@@ -89,6 +89,9 @@ public:
     // [StepSearch] Preset Search Trajectory & Preset Loop # & Trajectory points finished
     std::vector<Point> search_tra;
     int loop, search_tra_finish;
+
+    // [StepSearch] Detecing Results of Other UAVs
+    int det_res[UAV_NUM + 1];
     
     // [StepMap] Vessel ID to map
     int vsl_id;
@@ -140,9 +143,28 @@ public:
                     fnc(i));
         }
         
+        // [Valid] Detecting Results of Others
+        for (int i = 1; i <= UAV_NUM; i++){
+            if (i == sUAV_id) {
+                det_pub = this->create_publisher<std_msgs::msg::Int16>(
+                    "/quadrotor_" + std::to_string(sUAV_id) + "/det_res", 10
+                );
+                continue;
+            }
+            auto fnc = [this](int i_){
+                return [i_, this](const std_msgs::msg::Int16 & msg) -> void{
+                    this->det_res[i_] = msg.data;
+                };
+            };
+            det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
+                "/quadrotor_" + std::to_string(i) + "/det_res", 10,
+                fnc(i)
+            );
+        }
+
 
         // [Valid] Result of Detecting
-		det_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
+		det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
     	"/quadrotor_" + std::to_string(sUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
 
         // [Valid] Publish Quadrotor Velocity Command
@@ -172,6 +194,10 @@ public:
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
             MyDataFun::set_value(vsl_pos[i], far_away);
+        }
+        
+        for (int i = 1; i <= UAV_NUM; i++){
+            det_res[i] = 0;
         }
 
     }
@@ -401,6 +427,14 @@ private:
         for (int i = 0; i < VESSEL_NUM; i++){
             if (is_near_2d(vsl_pos[i], 3000)){
                 printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
+                for (int j = 1; j <= UAV_NUM; j++){
+                    if (j == sUAV_id) continue;
+                    if ((det_res[j] >> i) & 1){
+                        printf("But UAV %d has got it!!!!!!\n", j);
+                        return;
+                    }
+                }
+                det_res[sUAV_id] += 1 << i;
                 vsl_id = i;
                 search_tra_finish = 0;
                 task_state = MAP;
@@ -410,35 +444,9 @@ private:
         
     }
 	
-	void StepToMap(){
-        int_map_pos.x = vis_vsl_pos.x;
-        int_map_pos.y = vis_vsl_pos.y;
-        int_map_pos.z = MAP_TRA_HEIGHT;
-        printf("Initial Mapping Pos (%.2lf, %.2lf, %.2lf)\n", int_map_pos.x, int_map_pos.y, int_map_pos.z);
-        // UAV_Control_earth(0, 0, 0, 0);
-        UAV_Control_to_point_while_facing(int_map_pos, vis_vsl_pos);
-        // UAV_Control_to_Map_Pixel = (vis_vsl_pix);
-        printf("Approaching to Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", vsl_id);
-		if (is_near_2d(vis_vsl_pos, 2 * MAP_TRA_RADIUS)){
-            StepMapInit();
-            task_state = MAP;
-        }
-	}
-	
     void StepMapInit(){
         map_init_theta = atan2(UAV_pos.y - vsl_pos[vsl_id].y, UAV_pos.x - vsl_pos[vsl_id].x);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
-    }
-
-    void StepPremap(){
-        printf("PREMAP!!!\n");
-        UAV_Control_to_Point_earth(vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(map_init_theta),
-                                   vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(map_init_theta), 
-                                   MAP_TRA_HEIGHT);
-        if (abs(UAV_pos.z - MAP_TRA_HEIGHT) <= 1){
-            printf("Premap completed!!!!!!!!!!!!!!!!!!!!!!\n");
-            task_state = MAP;
-        }
     }
 
     void StepMap(){
@@ -477,6 +485,11 @@ private:
             printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
              vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
         }
+        printf("Detection Status: %d\n", det_res[sUAV_id]);
+
+        std_msgs::msg::Int16 tmp;
+        tmp.data = det_res[sUAV_id];
+        det_pub->publish(tmp); 
         switch (task_state){
             case INIT:{
                 StepInit();
@@ -488,14 +501,6 @@ private:
             }
             case SEARCH:{
                 StepSearch();
-                break;
-            }
-            case TOMAP:{
-            	StepToMap();
-            	break;
-            }
-            case PREMAP:{
-                StepPremap();
                 break;
             }
             case MAP:{
@@ -521,7 +526,9 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, usv_sub, vsl_sub[VESSEL_NUM];
-    rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_sub;
+    rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_box_sub;
+    rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr det_sub[UAV_NUM + 1];
+    rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr det_pub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
 };
 
