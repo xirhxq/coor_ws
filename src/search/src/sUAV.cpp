@@ -53,8 +53,7 @@ public:
     // Position of Target Vessel A-G
     Point vsl_pos[VESSEL_NUM];
     Point real_vsl_pos[VESSEL_NUM];
-    double vis_vsl_rsm[VESSEL_NUM];
-    int vis_vsl_cnt[VESSEL_NUM];
+    MyMathFun::DATA_STAT vsl_pos_stat[VESSEL_NUM];
 
     // Information Target Vessel Information of Vision
     double vis_vsl_pix[2];
@@ -96,8 +95,9 @@ public:
 
     // [StepMap] Map trajectory radius & Map Lateral velocity & Map Height
     const double MAP_Y_VEL = 3;
-    const double MAP_TRA_HEIGHT = 5;
-    const double MAP_TRA_RADIUS = 30;
+    const double CAMERA_ANGLE = 30;
+    const double MAP_TRA_HEIGHT = 40;
+    const double MAP_TRA_RADIUS = MAP_TRA_HEIGHT / tan(CAMERA_ANGLE * DEG2RAD);
 
     // [StepMap] Initial relative yaw
     double map_init_theta;
@@ -172,8 +172,6 @@ public:
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
             MyDataFun::set_value(vsl_pos[i], far_away);
-            vis_vsl_cnt[i] = 0;
-            vis_vsl_rsm[i] = 0;
         }
 
     }
@@ -192,14 +190,14 @@ private:
     }
 
 	void det_callback(const target_bbox_msgs::msg::BoundingBoxes & msg){
-        for (int i = 0; i < msg.bounding_boxes.size(); i++){
+        for (int i = 0; i < int(msg.bounding_boxes.size()); i++){
             vis_vsl_pix[0] = msg.bounding_boxes[i].x_center;
             vis_vsl_pix[1] = msg.bounding_boxes[i].y_center;
 			vis_vsl_flag = msg.bounding_boxes[i].flag;
 			vis_vsl_id = msg.bounding_boxes[i].class_id;
             // printf("Got Target: %s\n", vis_vsl_id.c_str());
             vis_vsl_num = vis_vsl_id[vis_vsl_id.length() - 1] - 'a';
-            MyMathFun::angle_transf(UAV_Euler, 15 * DEG2RAD, vis_vsl_pix, q_LOS_v);
+            MyMathFun::angle_transf(UAV_Euler, CAMERA_ANGLE * DEG2RAD, vis_vsl_pix, q_LOS_v);
             // printf("qlos: (%.2lf, %.2lf)\n", q_LOS_v[1] * RAD2DEG, q_LOS_v[2] * RAD2DEG);
             pos_err_v[2] = -UAV_pos.z;	
             pos_err_v[0] = (-pos_err_v[2]/tan(q_LOS_v[1]))*cos(q_LOS_v[2]);
@@ -210,11 +208,7 @@ private:
             vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
-            vis_vsl_cnt[vis_vsl_num]++;
-            vis_vsl_rsm[vis_vsl_num] = pow(vis_vsl_rsm[vis_vsl_num], 2) / vis_vsl_cnt[vis_vsl_num] *  (vis_vsl_cnt[vis_vsl_num] - 1);
-            vis_vsl_rsm[vis_vsl_num] += MyDataFun::dissq(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]) / vis_vsl_cnt[vis_vsl_num];
-            vis_vsl_rsm[vis_vsl_num] = pow(vis_vsl_rsm[vis_vsl_num], 0.5);
-            // printf("Vessel Pos (%.2lf, %.2lf, %.2lf)\n", vis_vsl_pos.x, vis_vsl_pos.y, vis_vsl_pos.z);
+            vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
             
         }
 	}
@@ -414,13 +408,6 @@ private:
             }
         }
         
-        // if (vis_vsl_id[vis_vsl_id.length() - 1] == 'A' || vis_vsl_id[vis_vsl_id.length() - 1] == 'a'){
-        //     printf("Got Vessel_A !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-        // 	vsl_id = 0;
-        //     search_tra_finish = 0;
-        // 	task_state = TOMAP;
-        // }
-        
     }
 	
 	void StepToMap(){
@@ -487,7 +474,8 @@ private:
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
         for (int i = 0; i < VESSEL_NUM; i++){
-            printf("Vessel %c: %s by vision, %s by cheat, rsm: %.4lf\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(), vis_vsl_rsm[i]);
+            printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
+             vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
         }
         switch (task_state){
             case INIT:{

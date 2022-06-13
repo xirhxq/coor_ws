@@ -5,6 +5,23 @@
 #define RAD2DEG 180/PI
 
 namespace MyMathFun{
+	struct DATA_STAT{
+		int cnt;
+		double mean, std, rms;
+		DATA_STAT(){
+		cnt = 0;
+		mean = std = rms = 0.0;
+		}
+		void new_data(double x){
+		cnt++;
+		std = pow(std, 2) / cnt * (cnt - 1) + (x - mean) * (x - mean) / cnt * (cnt - 1) / cnt;
+		std = pow(std, 0.5);
+		mean = mean / cnt * (cnt - 1) + x / cnt;
+		rms = pow(rms, 2) / cnt * (cnt - 1) + x * x / cnt;
+		rms = pow(rms, 0.5);
+		}
+	};
+
 	void quaternion_2_euler(double quat[4], double angle[3]){
 		angle[0] = atan2(2.0 * (quat[3] * quat[2] + quat[0] * quat[1]), 1.0 - 2.0 * (quat[1] * quat[1] + quat[2] * quat[2]));
 		angle[1] = asin(2.0 * (quat[2] * quat[0] - quat[3] * quat[1]));
