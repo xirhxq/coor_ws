@@ -105,23 +105,23 @@ public:
     // [StepMap] Initial relative yaw
     double map_init_theta;
 
-    sUAV(char *name) : Node("sUAV_" + std::string(name)) {
+    sUAV(char *name) : Node("suav_" + std::string(name)) {
         sUAV_id = std::atoi(name);
 
         // [Valid] IMU Data: 1. Pose 2. Orientation
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
-                "/quadrotor_" + std::to_string(sUAV_id) + "/imu/data", 10,
+                "/suav_" + std::to_string(sUAV_id) + "/imu/data", 10,
                 std::bind(&sUAV::imu_callback, this, _1));
 
 
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
-                "/quadrotor_" + std::to_string(sUAV_id) + "/air_pressure", 10,
+                "/suav_" + std::to_string(sUAV_id) + "/air_pressure", 10,
                 std::bind(&sUAV::alt_callback, this, _1));
 
         // [Invalid] Groundtruth Pose of Quadrotors
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/quadrotor_" + std::to_string(sUAV_id) + "/world_pose", 10,
+                "/model/suav_" + std::to_string(sUAV_id) + "/world_pose", 10,
                 std::bind(&sUAV::nav_callback, this, _1));
 
         // [Invalid] Groundtruth Pose of USV
@@ -147,7 +147,7 @@ public:
         for (int i = 1; i <= UAV_NUM; i++){
             if (i == sUAV_id) {
                 det_pub = this->create_publisher<std_msgs::msg::Int16>(
-                    "/quadrotor_" + std::to_string(sUAV_id) + "/det_res", 10
+                    "/suav_" + std::to_string(sUAV_id) + "/det_res", 10
                 );
                 continue;
             }
@@ -157,7 +157,7 @@ public:
                 };
             };
             det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
-                "/quadrotor_" + std::to_string(i) + "/det_res", 10,
+                "/suav_" + std::to_string(i) + "/det_res", 10,
                 fnc(i)
             );
         }
@@ -165,11 +165,11 @@ public:
 
         // [Valid] Result of Detecting
 		det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
-    	"/quadrotor_" + std::to_string(sUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
+    	"/suav_" + std::to_string(sUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
 
         // [Valid] Publish Quadrotor Velocity Command
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
-                "/quadrotor_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
+                "/suav_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
 
 
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
@@ -229,9 +229,12 @@ private:
             pos_err_v[0] = (-pos_err_v[2]/tan(q_LOS_v[1]))*cos(q_LOS_v[2]);
             pos_err_v[1] = (-pos_err_v[2]/tan(q_LOS_v[1]))*sin(q_LOS_v[2]);
             // printf("Rel Pos of Target: (%.2lf, %.2lf, %.2lf)\n", pos_err_v[0], pos_err_v[1], pos_err_v[2]);
-            vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
-            vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
-            vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
+            // vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
+            // vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
+            // vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
+            vis_vsl_pos.x = vis_vsl_pos.x + 0.9 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
+            vis_vsl_pos.y = vis_vsl_pos.y + 0.9 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
+            vis_vsl_pos.z = vis_vsl_pos.z + 0.9 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
@@ -269,7 +272,7 @@ private:
 
     template<typename T>
     bool pos_valid(T a){
-        return a.x >= -1400.0;
+        return a.x >= -1300.0;
     }
 
     template<typename T>
@@ -426,14 +429,16 @@ private:
         }
         for (int i = 0; i < VESSEL_NUM; i++){
             if (is_near_2d(vsl_pos[i], 3000)){
-                printf("Got Vessel %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", i);
+                printf("Got Vessel %c !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", 'A' + i);
+                bool other_flag = false;
                 for (int j = 1; j <= UAV_NUM; j++){
                     if (j == sUAV_id) continue;
                     if ((det_res[j] >> i) & 1){
                         printf("But UAV %d has got it!!!!!!\n", j);
-                        return;
+                        other_flag = true;
                     }
                 }
+                if (other_flag) continue;
                 det_res[sUAV_id] += 1 << i;
                 vsl_id = i;
                 search_tra_finish = 0;
@@ -452,7 +457,7 @@ private:
     void StepMap(){
      	printf("MAP!!!\n");
         // UAV_Control_to_point_while_facing(MyDataFun::plus(map_tra[map_tra_finish], vsl_pos[vsl_id]), vsl_pos[vsl_id]);
-        UAV_Control_circle_while_facing(vis_vsl_pos);
+        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
         if (0){
             task_state = HOLD;
         }
@@ -485,7 +490,11 @@ private:
             printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
              vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
         }
-        printf("Detection Status: %d\n", det_res[sUAV_id]);
+        printf("Detection Status: ");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            if (det_res[sUAV_id] >> i & 1) printf("%c", 'A' + i);
+        }
+        printf("\n");
 
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
