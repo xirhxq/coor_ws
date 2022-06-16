@@ -32,8 +32,15 @@ include_directories(
 add_executable(sUAV src/sUAV.cpp)
 ament_target_dependencies(sUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 
+add_executable(bUAV src/bUAV.cpp)
+ament_target_dependencies(bUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
+
 install(TARGETS
   sUAV
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS
+  bUAV
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

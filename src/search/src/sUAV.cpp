@@ -26,7 +26,7 @@ using namespace geometry_msgs::msg;
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
-int sUAV_id;
+int bUAV_id;
 
 typedef enum TASK_CODE{
     INIT,
@@ -106,22 +106,22 @@ public:
     double map_init_theta;
 
     sUAV(char *name) : Node("suav_" + std::string(name)) {
-        sUAV_id = std::atoi(name);
+        bUAV_id = std::atoi(name);
 
         // [Valid] IMU Data: 1. Pose 2. Orientation
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
-                "/suav_" + std::to_string(sUAV_id) + "/imu/data", 10,
+                "/suav_" + std::to_string(bUAV_id) + "/imu/data", 10,
                 std::bind(&sUAV::imu_callback, this, _1));
 
 
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
-                "/suav_" + std::to_string(sUAV_id) + "/air_pressure", 10,
+                "/suav_" + std::to_string(bUAV_id) + "/air_pressure", 10,
                 std::bind(&sUAV::alt_callback, this, _1));
 
         // [Invalid] Groundtruth Pose of Quadrotors
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/suav_" + std::to_string(sUAV_id) + "/world_pose", 10,
+                "/model/suav_" + std::to_string(bUAV_id) + "/world_pose", 10,
                 std::bind(&sUAV::nav_callback, this, _1));
 
         // [Invalid] Groundtruth Pose of USV
@@ -145,9 +145,9 @@ public:
         
         // [Valid] Detecting Results of Others
         for (int i = 1; i <= UAV_NUM; i++){
-            if (i == sUAV_id) {
+            if (i == bUAV_id) {
                 det_pub = this->create_publisher<std_msgs::msg::Int16>(
-                    "/suav_" + std::to_string(sUAV_id) + "/det_res", 10
+                    "/suav_" + std::to_string(bUAV_id) + "/det_res", 10
                 );
                 continue;
             }
@@ -165,11 +165,11 @@ public:
 
         // [Valid] Result of Detecting
 		det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
-    	"/suav_" + std::to_string(sUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
+    	"/suav_" + std::to_string(bUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
 
         // [Valid] Publish Quadrotor Velocity Command
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
-                "/suav_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
+                "/suav_" + std::to_string(bUAV_id) + "/cmd_vel", 10);
 
 
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
@@ -179,8 +179,8 @@ public:
         sat_yaw_rate = 30 * DEG2RAD;
         loop = 1;
         double search_single_width = 50, search_signle_depth = 400;
-        double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
+        double search_forward_y = (std::abs (bUAV_id - 5.5) - 0.25) * search_single_width  * ((bUAV_id > 5) * 2 - 1);
+        double search_backward_y = (std::abs (bUAV_id - 5.5) + 0.25) * search_single_width * ((bUAV_id > 5) * 2 - 1);
         double search_backward_x = -1400;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 50;
@@ -396,8 +396,7 @@ private:
         UAV_Control_earth(0, 0, 0, 0);
         MyDataFun::set_value(takeoff_point, UAV_pos);
         printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
-        rclcpp::Time time_now = this->get_clock()->now();
-        task_begin_time = time_now.seconds();
+        task_begin_time = this->get_clock()->now().seconds();
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
             printf("Get Ground Truth Position!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = TAKEOFF;
@@ -432,14 +431,14 @@ private:
                 printf("Got Vessel %c !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", 'A' + i);
                 bool other_flag = false;
                 for (int j = 1; j <= UAV_NUM; j++){
-                    if (j == sUAV_id) continue;
+                    if (j == bUAV_id) continue;
                     if ((det_res[j] >> i) & 1){
                         printf("But UAV %d has got it!!!!!!\n", j);
                         other_flag = true;
                     }
                 }
                 if (other_flag) continue;
-                det_res[sUAV_id] += 1 << i;
+                det_res[bUAV_id] += 1 << i;
                 vsl_id = i;
                 search_tra_finish = 0;
                 task_state = MAP;
@@ -460,11 +459,12 @@ private:
         UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
         if (0){
             task_state = HOLD;
+            hold_time = this->get_clock()->now().seconds();
         }
     }
     
     void StepHold(){
-        printf("Hold!!!\n");
+        printf("Holding: %.2lf!!!\n", task_time - hold_time);
         UAV_Control_earth(0, 0, 0, 0);
         if (task_time - hold_time >= hold_duration){
             printf("Hold %.2lf seconds completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", hold_duration);
@@ -492,12 +492,12 @@ private:
         }
         printf("Detection Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
-            if (det_res[sUAV_id] >> i & 1) printf("%c", 'A' + i);
+            if (det_res[bUAV_id] >> i & 1) printf("%c", 'A' + i);
         }
         printf("\n");
 
         std_msgs::msg::Int16 tmp;
-        tmp.data = det_res[sUAV_id];
+        tmp.data = det_res[bUAV_id];
         det_pub->publish(tmp); 
         switch (task_state){
             case INIT:{

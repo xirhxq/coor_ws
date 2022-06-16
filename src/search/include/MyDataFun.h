@@ -36,6 +36,12 @@ namespace MyDataFun{
         return res;
     }
 
+    Point new_point(double p[]){
+        Point res;
+        set_value(res, p);
+        return res;
+    }
+
     template<typename T1, typename T2>
     double dis(T1 a, T2 b){
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2) + std::pow(a.z - b.z, 2));
