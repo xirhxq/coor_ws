@@ -9,7 +9,7 @@ ros2 launch mbzirc_ros competition_local.launch.py ign_args:="-v 4 -r coast.sdf"
 2. Spawn UAV
 
 ```bash
-ros2 launch mbzirc_ign spawn.launch.py name:=quadrotor_1 world:=coast model:=mbzirc_quadrotor x:=1 y:=2 z:=0.05 R:=0 P:=0 Y:=0 slot0:=mbzirc_hd_camera slot0_rpy:="0 30 0" 
+ros2 launch mbzirc_ign spawn.launch.py name:=suav_1 world:=coast model:=mbzirc_quadrotor x:=1 y:=2 z:=0.05 R:=0 P:=0 Y:=0 slot0:=mbzirc_hd_camera slot0_rpy:="0 30 0" 
 ```
 
 3. IGN 2 ROS2 Bridge
@@ -37,3 +37,8 @@ ros2 run search sUAV 5
 
 2. Change `maxRotVelocity` from 800 to 1800 
    (in `/mbzirc_ws/src/mbzirc/mbzirc_ign/models/mbzirc_quadrotor/model.sdf.erb`)
+
+
+# c47v: Circling for seven vessels
+
+- For video recording to modeling.

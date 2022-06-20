@@ -35,12 +35,19 @@ ament_target_dependencies(sUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 add_executable(bUAV src/bUAV.cpp)
 ament_target_dependencies(bUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 
+add_executable(c47v src/c47v.cpp)
+ament_target_dependencies(c47v rclcpp sensor_msgs nav_msgs target_bbox_msgs)
+
 install(TARGETS
   sUAV
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS
   bUAV
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS
+  c47v
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
