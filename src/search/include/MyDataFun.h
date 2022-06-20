@@ -57,6 +57,10 @@ namespace MyDataFun{
         return std::sqrt(std::pow(a.x - b.x, 2) + std::pow(a.y - b.y, 2));
     }
 
+    template<typename T1, typename T2>
+    double angle_2d(T1 from, T2 to){
+        return atan2(to.y - from.y, to.x - from.x);
+    }
 
     template<typename T1, typename T2>
     T1 minus(T1 a, T2 b){
