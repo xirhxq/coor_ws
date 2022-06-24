@@ -255,7 +255,7 @@ public:
         sat_vel.z = 5;
         sat_yaw_rate = 90 * DEG2RAD;
         loop = 1;
-        double search_single_width = 50, search_signle_depth = 400;
+        double search_single_width = 300, search_signle_depth = 3000;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -1400;
@@ -267,6 +267,13 @@ public:
             search_tra.push_back(MyDataFun::new_point(search_forward_x, search_backward_y, search_height));
             search_tra.push_back(MyDataFun::new_point(search_backward_x, search_backward_y, search_height));
         }
+
+        // // 军宁数据采集
+        // for (int i = 1; i <= loop; i++){
+        //     search_tra.push_back(MyDataFun::new_point(-1400, -1500, search_height));
+        //     search_tra.push_back(MyDataFun::new_point(1500, -1500, search_height));
+        //     search_tra.push_back(MyDataFun::new_point(1500, 0, search_height));
+        // }
 
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
@@ -495,7 +502,7 @@ private:
 
             // [Valid] Result of Detecting
             det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
-            "/suav_" + std::to_string(sUAV_id) + "/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
+            "/suav_" + std::to_string(sUAV_id) + "/slot0/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
         }
     }
 

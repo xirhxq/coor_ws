@@ -5,8 +5,11 @@
 #include <string>
 #include <cmath>
 #include <vector>
+#include <fstream>
+#include <ctime>
 
 #include "rclcpp/rclcpp.hpp"
+#include "rosgraph_msgs/msg/clock.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/fluid_pressure.hpp"
 #include "geometry_msgs/msg/twist.hpp"
@@ -19,40 +22,79 @@
 #include "MyDataFun.h"
 typedef geometry_msgs::msg::Point Point;
 
+#define UAV_NUM 10
+#define KP 0.2
+#define X_KP KP
+#define Y_KP KP
+#define Z_KP KP
+#define YAW_KP 1.0
+
 using namespace geometry_msgs::msg;
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
-int bUAV_id;
-double buav_hold_points[6][3] = {{-1535, -134, 49},
-                                  {-1500, -1363, 52}, {-1502, -739, 58},
-                                  {-1520, 1468, 52}, {-1523, 1041, 63},
-                                  {-1500, 513, 64}};
+int testUAV_id;
 
 typedef enum TASK_CODE{
     INIT,
     TAKEOFF,
     PREPARE,
+    SEARCH,
     HOLD,
     BACK,
     LAND
 } STATE_CODE;
 
-class bUAV : public rclcpp::Node {
+class testUAV : public rclcpp::Node {
 public:
+    // Log fstream
+    std::ofstream log_file; 
+    
+    // Variable names in log file
+    std::vector<std::string> name_vec; 
+    
+    // Sim time clock
+    double clock; 
 
-    // Position & Attitude & (Linear) Velocity & Air Pressure Height of bUAV itself
+    // [Invalid] Groundtruth position of testUAV itself
     Point UAV_pos;
-    Quaternion UAV_att_imu, UAV_att_pos;
+
+    // Attitude of testUAV itself by imu
+    Quaternion UAV_att_imu;
+    
+    // [Invalid] Groundtruth attitude of testUAV itself
+    Quaternion UAV_att_pos;
+
+    // [Invalid] Groundtruth velocity in world frame of testUAV itself
     Point UAV_vel;
+
+    // Air pressure height of testUAV itself
     double air_pressure;
 
-    // Euler Angles & Transform Matrix Computed
+    // Euler angles of testUAV itself
     double UAV_Euler[3];
+
+    // Transform matrix of testUAV itself
     double R_e2b[3][3];
 
-    // Velocity & yaw rate saturation of UAV control 
+
+
+    // Target LOS in body frame
+    double q_LOS_v[3];
+
+    // Target relative position in world frame
+    double pos_err_v[3];
+
+    // Target vessel position by vision
+    Point vis_vsl_pos;
+
+    // Position of USV
+    Point USV_pos;
+
+    // Velocity saturation of UAV control 
     Point sat_vel;
+
+    // Yaw rate saturation of UAV control
     double sat_yaw_rate;
 
     // Some task points in world frame
@@ -64,51 +106,98 @@ public:
     // Task begin time
     double task_begin_time;
     
-    // UAV task state
-    STATE_CODE  task_state;
-
     // [StepHold] Time from start & Preset time duration
     double hold_time, hold_duration = 10.0;
 
-    // [StepHold] Hold Point
-    Point hold_point;
+    // UAV task state
+    STATE_CODE  task_state;
+
+    // [StepSearch] Preset Search Trajectory
+    std::vector<Point> search_tra;
+
+    // [StepSearch] Preset Loop #
+    int loop;
+    
+    // [StepSearch] Trajectory points finished
+    int search_tra_finish;
 
 
-    bUAV(char *name) : Node("buav_" + std::string(name)) {
-        bUAV_id = std::atoi(name);
+    // Camera angle
+    const double CAMERA_ANGLE = 30;
+
+
+
+    testUAV(char *name) : Node("testuav_" + std::string(name)) {
+        testUAV_id = std::atoi(name);
+
+        time_t tt = time(NULL);
+        tm* t = localtime(&tt);
+        char iden_path[256];
+        sprintf(iden_path, "/home/ps/coor_ws/src/search/data/%02d-%02d_%02d-%02d_%d.txt",
+        t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, testUAV_id);
+        log_file.open(iden_path, std::ios::out);
+        while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
+        
+        name_vec = {"time", "day", "hour", "min", "sec", "control_state", 
+                    "uav_pos_x", "uav_pos_y", "uav_pos_z",
+                    "uav_roll", "uav_pitch", "uav_yaw",
+                    "uav_vel_x", "uav_vel_y", "uav_vel_z"};
+
+        for (auto t: name_vec){
+            log_file << t << "\t";
+        } log_file << std::endl;
+
+
+        // [Valid] Clock
+        clock_sub = this->create_subscription<rosgraph_msgs::msg::Clock>(
+            "/clock", 10, std::bind(&testUAV::clock_callback, this, _1)
+        );
 
         // [Valid] IMU Data: 1. Pose 2. Orientation
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
-                "/buav_" + std::to_string(bUAV_id) + "/imu/data", 10,
-                std::bind(&bUAV::imu_callback, this, _1));
+                "/suav_" + std::to_string(testUAV_id) + "/imu/data", 10,
+                std::bind(&testUAV::imu_callback, this, _1));
 
 
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
-                "/buav_" + std::to_string(bUAV_id) + "/air_pressure", 10,
-                std::bind(&bUAV::alt_callback, this, _1));
+                "/suav_" + std::to_string(testUAV_id) + "/air_pressure", 10,
+                std::bind(&testUAV::alt_callback, this, _1));
 
-        // [Invalid] Groundtruth Pose of Quadrotor
+        // [Invalid] Groundtruth Pose of Quadrotors
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/buav_" + std::to_string(bUAV_id) + "/world_pose", 10,
-                std::bind(&bUAV::nav_callback, this, _1));
+                "/model/suav_" + std::to_string(testUAV_id) + "/world_pose", 10,
+                std::bind(&testUAV::nav_callback, this, _1));
+
+
+
 
         // [Valid] Publish Quadrotor Velocity Command
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
-                "/buav_" + std::to_string(bUAV_id) + "/cmd_vel", 10);
+                "/suav_" + std::to_string(testUAV_id) + "/cmd_vel", 10);
 
 
-        timer_ = this->create_wall_timer(50ms, std::bind(&bUAV::timer_callback, this));
-        sat_vel.x = 5;
-        sat_vel.y = 5;
-        sat_vel.z = 2;
-        sat_yaw_rate = 30 * DEG2RAD;
-
-        hold_point = MyDataFun::new_point(buav_hold_points[bUAV_id]);
+        timer_ = this->create_wall_timer(50ms, std::bind(&testUAV::timer_callback, this));
+        sat_vel.x = 15;
+        sat_vel.y = 15;
+        sat_vel.z = 5;
+        sat_yaw_rate = 90 * DEG2RAD;
+        loop = 1;
+        double search_height = 50;
+        for (int i = 1; i <= loop; i++){
+            search_tra.push_back(MyDataFun::new_point(-1500, 1500, search_height));
+            search_tra.push_back(MyDataFun::new_point(1800, 1500, search_height));
+            search_tra.push_back(MyDataFun::new_point(1800, -1500, search_height));
+            search_tra.push_back(MyDataFun::new_point(-1500, -1500, search_height));
+        }
 
     }
 
 private:
+
+    void clock_callback(const rosgraph_msgs::msg::Clock & msg){
+        clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
+    }
     
     void imu_callback(const sensor_msgs::msg::Imu & msg){
         MyDataFun::set_value_quaternion(this->UAV_att_imu, msg.orientation);
@@ -130,9 +219,13 @@ private:
         MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
     }
 
+    double get_time_now(){
+        return clock;
+        // return this->get_clock()->now().seconds();
+    }
+
     void update_time(){
-        rclcpp::Time time_now = this->get_clock()->now();
-        task_time = time_now.seconds() - task_begin_time;
+        task_time = get_time_now() - task_begin_time;
     }
 
     template<typename T>
@@ -143,6 +236,11 @@ private:
     template<typename T>
     bool is_near_2d(T a, double r){
         return MyDataFun::dis_2d(a, UAV_pos) <= r;
+    }
+
+    template<typename T>
+    bool pos_valid(T a){
+        return a.x >= -1300.0;
     }
 
     template<typename T>
@@ -169,8 +267,11 @@ private:
     template<typename T>
     void UAV_Control_earth(T ctrl_cmd, double yaw_rate){
         geometry_msgs::msg::Twist cmd;
-        cmd.angular.z = yaw_rate;
+        cmd.angular.z = yaw_rate * YAW_KP;
         MyDataFun::set_value(cmd.linear, ctrl_cmd);
+        cmd.linear.x *= X_KP;
+        cmd.linear.y *= Y_KP;
+        cmd.linear.z *= Z_KP;
         printf("UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
         printf("Saturated UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
@@ -190,9 +291,29 @@ private:
     }
 
     template<typename T>
+    void UAV_Control_body(T ctrl_cmd, double yaw_rate){
+        geometry_msgs::msg::Twist cmd;
+        cmd.angular.z = yaw_rate;
+        MyDataFun::set_value(cmd.linear, ctrl_cmd);
+        printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_vel(cmd.linear);
+        vel_cmd_pub->publish(cmd);
+    }
+
+    void UAV_Control_body(double x, double y, double z, double yaw_rate){
+        geometry_msgs::msg::Twist cmd;
+        cmd.linear.x = x;
+        cmd.linear.y = y;
+        cmd.linear.z = z;
+        UAV_Control_body(cmd.linear, yaw_rate);
+    }
+    
+    template<typename T>
     void UAV_Control_to_Point_earth(T ctrl_cmd){
         printf("Control to Point (%.2lf, %.2lf, %.2lf)\n", ctrl_cmd.x, ctrl_cmd.y, ctrl_cmd.z);
-        UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), -0.2 * UAV_Euler[2]);
+        double yaw_diff = MyDataFun::angle_2d(UAV_pos, ctrl_cmd) - UAV_Euler[2];
+        if (MyDataFun::dis_2d(ctrl_cmd, UAV_pos) <= 5) yaw_diff = 0;
+        UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
     }
 
     void UAV_Control_to_Point_earth(double x, double y, double z){
@@ -206,11 +327,10 @@ private:
     void StepInit(){
         UAV_Control_earth(0, 0, 0, 0);
         MyDataFun::set_value(birth_point, UAV_pos);
-        MyDataFun::set_value(takeoff_point, birth_point);
-        takeoff_point.z += 20 + 5 * bUAV_id;
-        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", birth_point.x, birth_point.y, birth_point.z);
-        rclcpp::Time time_now = this->get_clock()->now();
-        task_begin_time = time_now.seconds();
+        MyDataFun::set_value(takeoff_point, UAV_pos);
+        takeoff_point.z += 50;
+        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
+        task_begin_time = get_time_now();
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
             printf("Get Ground Truth Position!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = TAKEOFF;
@@ -227,18 +347,35 @@ private:
     }
 
     void StepPrepare(){
-        UAV_Control_to_Point_earth(hold_point);
-        printf("To Hold Point!!!!!\n");
-        if (is_near(hold_point, 1)){
-            printf("Prepare Completed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-            task_state = HOLD;
-            hold_time = this->get_clock()->now().seconds() - task_begin_time;
+        UAV_Control_to_Point_earth(search_tra[0]);
+     	printf("Prepare!!!\n");
+        if (is_near(search_tra[0], 1)){
+            printf("Prepare Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+            task_state = SEARCH;
+            search_tra_finish = 0;
         }
     }
+
+    void StepSearch(){
+     	printf("Search!!!\n");
+        UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
+        if (is_near(search_tra[search_tra_finish], 1)){
+            search_tra_finish++;
+            printf("#%d Trajectory Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", search_tra_finish);
+            if (search_tra_finish == int(search_tra.size())){
+                printf("Search Failed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+                search_tra_finish = 0;
+                task_state = LAND;
+            }
+        }
+        
+    }
+	
+
     
     void StepHold(){
         printf("Holding: %.2lf!!!\n", task_time - hold_time);
-        UAV_Control_to_Point_earth(hold_point);
+        UAV_Control_earth(0, 0, 0, 0);
         if (task_time - hold_time >= hold_duration){
             printf("Hold %.2lf seconds completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", hold_duration);
             task_state = BACK;
@@ -249,14 +386,13 @@ private:
         UAV_Control_to_Point_earth(takeoff_point);
      	printf("Back!!!\n");
         if (is_near(takeoff_point, 1)){
-            printf("Back to Takeoff Point !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+            printf("Back Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = LAND;
         }
     }
 
     void StepLand(){
         UAV_Control_to_Point_earth(birth_point);
-        printf("Land!!!\n");
     }
 
     void timer_callback() {
@@ -269,7 +405,7 @@ private:
         // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
-
+        printf("\n");
         switch (task_state){
             case INIT:{
                 StepInit();
@@ -281,6 +417,10 @@ private:
             }
             case PREPARE:{
                 StepPrepare();
+                break;
+            }
+            case SEARCH:{
+                StepSearch();
                 break;
             }
             case HOLD:{
@@ -303,16 +443,19 @@ private:
     }
 
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub;
+    rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_box_sub;
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, usv_sub;
+    rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr det_pub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
 };
 
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<bUAV>(argv[1]));
+    rclcpp::spin(std::make_shared<testUAV>(argv[1]));
     rclcpp::shutdown();
     return 0;
 }
