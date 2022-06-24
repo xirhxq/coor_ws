@@ -320,9 +320,9 @@ private:
             // vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
             // vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
             // vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
-            vis_vsl_pos.x = vis_vsl_pos.x + 0.5 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
-            vis_vsl_pos.y = vis_vsl_pos.y + 0.5 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
-            vis_vsl_pos.z = vis_vsl_pos.z + 0.5 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
+            vis_vsl_pos.x = vis_vsl_pos.x + 0.9 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
+            vis_vsl_pos.y = vis_vsl_pos.y + 0.9 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
+            vis_vsl_pos.z = vis_vsl_pos.z + 0.9 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
