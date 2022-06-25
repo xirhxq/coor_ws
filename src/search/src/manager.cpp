@@ -21,6 +21,8 @@ using std::placeholders::_1;
 
 class Manager : public rclcpp::Node {
 
+public:
+
     // Log fstream
     std::ofstream log_file; 
 
@@ -67,13 +69,11 @@ class Manager : public rclcpp::Node {
         } log_file << std::endl;
 
         // [Valid] Clock
-        auto fnc = [this](){
-            return [this](const rosgraph_msgs::msg::Clock & msg){
-                this->clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
-            };
-        };
         clock_sub = this->create_subscription<rosgraph_msgs::msg::Clock>(
-            "/clock", 10, fnc
+            "/clock", 10, 
+            [this](const rosgraph_msgs::msg::Clock & msg){
+                this->clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
+            }
         );
 
         
