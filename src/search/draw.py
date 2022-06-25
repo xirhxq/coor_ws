@@ -10,7 +10,7 @@ import pandas as pd
 import re
 import numpy as np
 
-ptn = re.compile('.*.txt')
+ptn = re.compile('.*_[0-9][0-9].txt')
 src = '/home/ps/coor_ws/src/search/data/'
 files = os.listdir(src)
 
@@ -20,7 +20,7 @@ txt_files.sort(key=lambda fp: os.path.getctime(fp), reverse=True)
 
 newest = txt_files[0]
 
-newest_files = [f for f in txt_files if newest[:-5] == f[:-5]]
+newest_files = [f for f in txt_files if newest[:-6] == f[:-6]]
 newest_files.sort()
 
 print(newest_files)
@@ -39,12 +39,12 @@ max_x, min_x, max_y, min_y, max_z, min_z = -2000, 2000, -2000, 2000, -2000, 2000
 uavnums = ''
 for f in newest_files:
     data = pd.read_csv(f, sep='\t')
-    print("sUAV {}".format(f[-5]))
-    uavnums = uavnums + f[-5]
+    print("sUAV {}".format(f[-6:-4]))
+    uavnums = uavnums + f[-6:-4]
     data.drop(labels=0, axis=0, inplace=True)
     print(data.head())
     ax.plot3D(data['uav_pos_x'], data['uav_pos_y'], data['uav_pos_z'],
-          color=color_list(int(f[-5])), label="sUAV {}".format(f[-5]))
+          color=color_list(int(f[-6:-4])), label="sUAV {}".format(f[-6:-4]))
     max_x = max(max_x, max(data['uav_pos_x']))
     min_x = min(min_x, min(data['uav_pos_x']))
     max_y = max(max_y, max(data['uav_pos_y']))
@@ -59,5 +59,5 @@ ax.set_zlim(min_z, max_z)
 plt.gca().set_box_aspect((max_x - min_x, max_y - min_y, 5 * (max_z - min_z)))
 plt.title('sUAV Trajectory')
 
-plt.savefig(newest[:-5] + uavnums + '.png')
+plt.savefig(newest[:-7] + '.png')
 plt.show()

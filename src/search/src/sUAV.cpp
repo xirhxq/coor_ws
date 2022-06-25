@@ -169,7 +169,7 @@ public:
         time_t tt = time(NULL);
         tm* t = localtime(&tt);
         char iden_path[256];
-        sprintf(iden_path, "/home/ps/coor_ws/src/search/data/%02d-%02d_%02d-%02d_%d.txt",
+        sprintf(iden_path, "/home/ps/coor_ws/src/search/data/%02d-%02d_%02d-%02d_%02d.txt",
         t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, sUAV_id);
         log_file.open(iden_path, std::ios::out);
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
