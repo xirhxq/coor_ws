@@ -33,10 +33,16 @@ public:
     double clock; 
 
     // [Invalid] Groundtruth position of sUAV itself
-    Point UAV_pos;
+    Point real_suav_pos[sUAV_NUM];
 
     // [Invalid] Groundtruth position of target vessel A-G
     Point real_vsl_pos[VESSEL_NUM];
+
+    // Time duration from takeoff
+    double task_time;
+
+    // Task begin time
+    double task_begin_time;
 
     Manager() : Node("Manager") {
         time_t tt = time(NULL);
@@ -64,6 +70,7 @@ public:
                 name_vec.push_back(s);
             }
         }
+
         for (auto t: name_vec){
             log_file << t << "\t";
         } log_file << std::endl;
@@ -76,8 +83,68 @@ public:
             }
         );
 
-        
+        // [Invalid] Groundtruth Pose of Target Vessels
+        for (int i = 0; i < VESSEL_NUM; i++){
+            std::string chara_str;
+            chara_str = chara_str + char('A' + i);
+            vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
+                    "/model/Vessel_" + chara_str + "/world_pose", 10,
+                    [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
+                        this->real_vsl_pos[i] = msg.position;
+                    }
+            );
+        }
 
+        // [Invalid] Groundtruth Pose of UAVs
+        for (int i = 1; i <= VESSEL_NUM; i++){
+            std::string chara_str;
+            chara_str = chara_str + char('0' + i);
+            vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
+                    "/model/suav_" + chara_str + "/world_pose", 10,
+                    [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
+                        this->real_suav_pos[i] = msg.position;
+                    }
+            );
+        }
+        
+        timer_ = this->create_wall_timer(50ms, std::bind(&Manager::timer_callback, this));
+
+    }
+
+    double get_time_now(){
+        return clock;
+        // return this->get_clock()->now().seconds();
+    }
+
+    void update_time(){
+        task_time = get_time_now() - task_begin_time;
+    }
+
+    void log_once(){
+        time_t tt = time(NULL);
+        tm* t = localtime(&tt);
+        log_file.precision(7);
+        log_file << get_time_now() - task_begin_time << "\t"
+                 << t->tm_mday << "\t"
+                 << t->tm_hour << "\t"
+                 << t->tm_min << "\t"
+                 << t->tm_sec << "\t";
+        for (int i = 0; i < VESSEL_NUM; i++){
+            log_file << real_vsl_pos[i].x << "\t"
+                     << real_vsl_pos[i].y << "\t"
+                     << real_vsl_pos[i].z << "\t";
+        }
+        for (int i = 1; i <= sUAV_NUM; i++){
+            log_file << real_suav_pos[i].x << "\t"
+                     << real_suav_pos[i].y << "\t"
+                     << real_suav_pos[i].z << "\t";
+        }
+        log_file << std::endl;
+    }
+
+    void timer_callback(){
+        log_once();
+        printf("Log!\n");
     }
 
 private:
