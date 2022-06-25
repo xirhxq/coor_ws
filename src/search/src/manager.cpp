@@ -70,8 +70,8 @@ class Manager : public rclcpp::Node {
         auto fnc = [this](){
             return [this](const rosgraph_msgs::msg::Clock & msg){
                 this->clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
-            }
-        }
+            };
+        };
         clock_sub = this->create_subscription<rosgraph_msgs::msg::Clock>(
             "/clock", 10, fnc
         );
@@ -85,7 +85,7 @@ private:
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr suav_sub[sUAV_NUM + 1];
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr vsl_sub[VESSEL_NUM];
-}
+};
 
 
 int main(int argc, char **argv){
