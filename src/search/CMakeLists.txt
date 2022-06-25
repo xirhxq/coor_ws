@@ -28,6 +28,8 @@ include_directories(
  	include
 )
 
+add_executable(manager src/manager.cpp)
+ament_target_dependencies(manager rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 
 add_executable(sUAV src/sUAV.cpp)
 ament_target_dependencies(sUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
@@ -37,6 +39,10 @@ ament_target_dependencies(bUAV rclcpp sensor_msgs nav_msgs target_bbox_msgs)
 
 add_executable(c47v src/c47v.cpp)
 ament_target_dependencies(c47v rclcpp sensor_msgs nav_msgs target_bbox_msgs)
+
+install(TARGETS
+  manager
+  DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS
   sUAV
