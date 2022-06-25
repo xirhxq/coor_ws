@@ -33,7 +33,7 @@ public:
     double clock; 
 
     // [Invalid] Groundtruth position of sUAV itself
-    Point real_suav_pos[sUAV_NUM];
+    Point real_suav_pos[sUAV_NUM + 1];
 
     // [Invalid] Groundtruth position of target vessel A-G
     Point real_vsl_pos[VESSEL_NUM];
@@ -54,7 +54,7 @@ public:
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
         
         name_vec = {"time", "day", "hour", "min", "sec"};
-        for (int i = 0; i < 7; i++){
+        for (int i = 0; i < VESSEL_NUM; i++){
             for (int j = 0; j < 3; j++){
                 // "vessel_('a' + i)_('x' + j)"
                 std::string s = "vessel_";
@@ -62,11 +62,11 @@ public:
                 name_vec.push_back(s);
             }
         }
-        for (int i = 1; i <= 10; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             for (int j = 0; j < 3; j++){
                 // 'suav_i_('x'+j)
                 std::string s = "suav_";
-                s = s + char('0' + i) + '_' + char('x' + j);
+                s = s + std::to_string(i) + '_' + char('x' + j);
                 name_vec.push_back(s);
             }
         }
@@ -87,6 +87,7 @@ public:
         for (int i = 0; i < VESSEL_NUM; i++){
             std::string chara_str;
             chara_str = chara_str + char('A' + i);
+            std::cout << "Subscribe to /model/Vessel_" + chara_str + "/world_pose" << std::endl;
             vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
                     "/model/Vessel_" + chara_str + "/world_pose", 10,
                     [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
@@ -96,10 +97,11 @@ public:
         }
 
         // [Invalid] Groundtruth Pose of UAVs
-        for (int i = 1; i <= VESSEL_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             std::string chara_str;
-            chara_str = chara_str + char('0' + i);
-            vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
+            chara_str = std::to_string(i);
+            std::cout << "Subscribe to /model/suav_" + chara_str + "/world_pose" << std::endl;
+            suav_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
                     "/model/suav_" + chara_str + "/world_pose", 10,
                     [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
                         this->real_suav_pos[i] = msg.position;
@@ -144,7 +146,7 @@ public:
 
     void timer_callback(){
         log_once();
-        printf("Log!\n");
+        // printf("Log!\n");
     }
 
 private:
