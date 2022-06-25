@@ -149,13 +149,13 @@ public:
     int vsl_id;
 
     // [StepMap] Map Lateral velocity
-    const double MAP_Y_VEL = 3;
+    const double MAP_Y_VEL = 5;
 
     // Camera angle
     const double CAMERA_ANGLE = 30;
 
     // [StepMap] Map trajectory height
-    const double MAP_TRA_HEIGHT = 40;
+    const double MAP_TRA_HEIGHT = 15;
 
     // [StepMap] Map trajectory radius
     const double MAP_TRA_RADIUS = MAP_TRA_HEIGHT / tan(CAMERA_ANGLE * DEG2RAD);
@@ -548,7 +548,7 @@ private:
 
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
-        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
+        UAV_Control_circle_while_facing(real_vsl_pos[vsl_id]);
         if (0){
             task_state = HOLD;
             hold_time = get_time_now();
