@@ -255,10 +255,10 @@ public:
         sat_vel.z = 5;
         sat_yaw_rate = 90 * DEG2RAD;
         loop = 1;
-        double search_single_width = 300, search_signle_depth = 3000;
+        double search_single_width = 50, search_signle_depth = 1000;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_x = -1400;
+        double search_backward_x = -1450;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 50;
         for (int i = 1; i <= loop; i++){
@@ -608,10 +608,10 @@ private:
         // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
-        for (int i = 0; i < VESSEL_NUM; i++){
-            printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
-             vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
-        }
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
+        //      vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
+        // }
         printf("Detection Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
             if (det_res[sUAV_id] >> i & 1) printf("%c", 'A' + i);
