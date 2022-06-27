@@ -179,6 +179,12 @@ public:
                     "uav_roll", "uav_pitch", "uav_yaw",
                     "uav_vel_x", "uav_vel_y", "uav_vel_z"};
 
+        for (int i = 0; i < VESSEL_NUM; i++){
+            std::string s = "vessel_";
+            s = s + char('a' + i) + "_error";
+            name_vec.push_back(s);
+        }
+
         for (auto t: name_vec){
             log_file << t << "\t";
         } log_file << std::endl;
@@ -595,7 +601,11 @@ private:
                  << UAV_Euler[2] << "\t"
                  << UAV_vel.x << "\t"
                  << UAV_vel.y << "\t"
-                 << UAV_vel.z << "\t" << std::endl;
+                 << UAV_vel.z << "\t";
+        for (int i = 0; i < VESSEL_NUM; i++){
+            log_file << MyDataFun::dis(real_vsl_pos[i], vsl_pos[i]) << "\t";
+        }
+        log_file << std::endl;
     }
 
     void timer_callback() {
