@@ -7,6 +7,7 @@
 #include <vector>
 #include <fstream>
 #include <ctime>
+#include <queue>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
@@ -28,13 +29,14 @@ typedef geometry_msgs::msg::Point Point;
 #define X_KP KP
 #define Y_KP KP
 #define Z_KP KP
-#define YAW_KP 1.0
+#define YAW_KP 1
 
 using namespace geometry_msgs::msg;
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 int sUAV_id;
+std::queue<double>q_cmd_x;
 
 typedef enum TASK_CODE{
     INIT,
@@ -56,7 +58,7 @@ public:
     std::vector<std::string> name_vec; 
     
     // Sim time clock
-    double clock; 
+    double clock;
 
     // [Invalid] Groundtruth position of sUAV itself
     Point UAV_pos;
@@ -155,7 +157,7 @@ public:
     const double CAMERA_ANGLE = 30;
 
     // [StepMap] Map trajectory height
-    const double MAP_TRA_HEIGHT = 15;
+    const double MAP_TRA_HEIGHT = 30;
 
     // [StepMap] Map trajectory radius
     const double MAP_TRA_RADIUS = MAP_TRA_HEIGHT / tan(CAMERA_ANGLE * DEG2RAD);
@@ -256,12 +258,12 @@ public:
 
 
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
-        sat_vel.x = 15;
-        sat_vel.y = 15;
+        sat_vel.x = 5;
+        sat_vel.y = 5;
         sat_vel.z = 5;
         sat_yaw_rate = 90 * DEG2RAD;
         loop = 1;
-        double search_single_width = 50, search_signle_depth = 1000;
+        double search_single_width = 70, search_signle_depth = 1000;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -1450;
@@ -273,13 +275,6 @@ public:
             search_tra.push_back(MyDataFun::new_point(search_forward_x, search_backward_y, search_height));
             search_tra.push_back(MyDataFun::new_point(search_backward_x, search_backward_y, search_height));
         }
-
-        // // 军宁数据采集
-        // for (int i = 1; i <= loop; i++){
-        //     search_tra.push_back(MyDataFun::new_point(-1400, -1500, search_height));
-        //     search_tra.push_back(MyDataFun::new_point(1500, -1500, search_height));
-        //     search_tra.push_back(MyDataFun::new_point(1500, 0, search_height));
-        // }
 
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
@@ -323,12 +318,12 @@ private:
             pos_err_v[0] = (-pos_err_v[2]/tan(q_LOS_v[1]))*cos(q_LOS_v[2]);
             pos_err_v[1] = (-pos_err_v[2]/tan(q_LOS_v[1]))*sin(q_LOS_v[2]);
             // printf("Rel Pos of Target: (%.2lf, %.2lf, %.2lf)\n", pos_err_v[0], pos_err_v[1], pos_err_v[2]);
-            // vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
-            // vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
-            // vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
-            vis_vsl_pos.x = vis_vsl_pos.x + 0.9 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
-            vis_vsl_pos.y = vis_vsl_pos.y + 0.9 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
-            vis_vsl_pos.z = vis_vsl_pos.z + 0.9 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
+            vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
+            vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
+            vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
+            // vis_vsl_pos.x = vis_vsl_pos.x + 0.9 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
+            // vis_vsl_pos.y = vis_vsl_pos.y + 0.9 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
+            // vis_vsl_pos.z = vis_vsl_pos.z + 0.9 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
@@ -384,6 +379,27 @@ private:
         if (a <= -PI) a += 2 * PI;
         if (a >= PI) a -= 2 * PI;
         a = MyMathFun::LimitValue(a, sat_yaw_rate);
+    }
+
+    // 中值滤波
+    template<typename T>
+    void filter_vel(T &a){
+        if (q_cmd_x.size() == 21) {
+            q_cmd_x.pop();
+            q_cmd_x.push(a.x);
+            std::queue<double> temp_que = q_cmd_x;
+            std::vector<double> temp_vec;
+            for(size_t i =0; i < q_cmd_x.size() ; i++){
+                temp_vec.push_back(temp_que.front());
+                temp_que.pop();
+            }
+            std::sort(temp_vec.begin(),temp_vec.end());
+            a.x = temp_vec[(q_cmd_x.size()+1)/2];
+        }
+        else {
+            q_cmd_x.push(a.x);
+
+        }
     }
     
     template<typename T>
@@ -446,7 +462,7 @@ private:
         printf("Distance 2 Vessel: %.2lf\n", dis2vsl);
         cmd.linear.x = (dis2vsl - MAP_TRA_RADIUS) * X_KP;
         cmd.linear.y = MAP_Y_VEL;
-        cmd.linear.z = (MAP_TRA_HEIGHT - UAV_pos.z) * Z_KP;
+        cmd.linear.z = (dis2vsl * tan(CAMERA_ANGLE * DEG2RAD) - UAV_pos.z) * Z_KP;
         double des_yaw = MyDataFun::angle_2d(UAV_pos, a);
         printf("Now yaw is %.2lf while desired yaw is %.2lf\n", UAV_Euler[2] * RAD2DEG, des_yaw * RAD2DEG);
         cmd.angular.z = YAW_KP * (des_yaw - UAV_Euler[2]);
@@ -454,6 +470,7 @@ private:
         printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
         saturate_yaw_rate(cmd.angular.z);
+        filter_vel(cmd.linear);
         printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
@@ -522,7 +539,7 @@ private:
                 printf("Search Failed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 search_tra_finish = 0;
                 task_state = BACK;
-                StepMapInit();
+                // StepMapInit();
             }
         }
         for (int i = 0; i < VESSEL_NUM; i++){
@@ -554,7 +571,7 @@ private:
 
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
-        UAV_Control_circle_while_facing(real_vsl_pos[vsl_id]);
+        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
         if (0){
             task_state = HOLD;
             hold_time = get_time_now();
