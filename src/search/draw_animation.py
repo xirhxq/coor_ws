@@ -11,8 +11,8 @@ import re
 import numpy as np
 import matplotlib.animation as animation
 
-ptn = re.compile('.*_15-32_Manager.txt')
-src = '/Users/xirhxq/Documents/BIT/2022_Spring_Summer/UAV_Inst/MBZIRC2023/coor_ws/coor_ws/src/search/data/'
+ptn = re.compile('.*_19-11_Manager.txt')
+src = 'src/search/data/'
 files = os.listdir(src)
 
 txt_files = [src + f for f in files if re.match(ptn, f)]

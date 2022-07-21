@@ -36,7 +36,10 @@ using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 int sUAV_id;
-std::queue<double>q_cmd_x;
+std::queue<double>filter_mid_x;
+std::queue<double>filter_mid_y;
+std::queue<double>filter_mid_z;
+
 
 typedef enum TASK_CODE{
     INIT,
@@ -151,7 +154,7 @@ public:
     int vsl_id;
 
     // [StepMap] Map Lateral velocity
-    const double MAP_Y_VEL = 5;
+    const double MAP_Y_VEL = 3;
 
     // Camera angle
     const double CAMERA_ANGLE = 30;
@@ -164,6 +167,9 @@ public:
 
     // [StepMap] Initial relative yaw
     double map_init_theta;
+
+    // [StepMap] Initial time
+    double map_init_time;
 
     sUAV(char *name) : Node("suav_" + std::string(name)) {
         sUAV_id = std::atoi(name);
@@ -321,9 +327,7 @@ private:
             vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
             vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
             vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
-            // vis_vsl_pos.x = vis_vsl_pos.x + 0.9 * (UAV_pos.x + pos_err_v[0] - vis_vsl_pos.x);
-            // vis_vsl_pos.y = vis_vsl_pos.y + 0.9 * (UAV_pos.y + pos_err_v[1] - vis_vsl_pos.y);
-            // vis_vsl_pos.z = vis_vsl_pos.z + 0.9 * (UAV_pos.z + pos_err_v[2] - vis_vsl_pos.z);
+            // filter_mid(vis_vsl_pos);
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
@@ -383,22 +387,49 @@ private:
 
     // 中值滤波
     template<typename T>
-    void filter_vel(T &a){
-        if (q_cmd_x.size() == 21) {
-            q_cmd_x.pop();
-            q_cmd_x.push(a.x);
-            std::queue<double> temp_que = q_cmd_x;
-            std::vector<double> temp_vec;
-            for(size_t i =0; i < q_cmd_x.size() ; i++){
-                temp_vec.push_back(temp_que.front());
-                temp_que.pop();
+    void filter_mid(T &a){
+        if (filter_mid_x.size() == 5) {
+            
+            filter_mid_x.pop();
+            filter_mid_x.push(a.x);
+            filter_mid_y.pop();
+            filter_mid_y.push(a.y);
+            filter_mid_z.pop();
+            filter_mid_z.push(a.z);
+
+            std::queue<double> temp_que_x = filter_mid_x;
+            std::vector<double> temp_x;
+            for(size_t i =0; i < filter_mid_x.size() ; i++){
+                temp_x.push_back(temp_que_x.front());
+                temp_que_x.pop();
             }
-            std::sort(temp_vec.begin(),temp_vec.end());
-            a.x = temp_vec[(q_cmd_x.size()+1)/2];
+            printf("temp before sort: %.6lf %.6lf %ld\n", temp_x.begin(), temp_x.end(), temp_x.size());
+            std::sort(temp_x.begin(),temp_x.end());
+            printf("temp after sort: %.6lf %.6lf\n", temp_x.begin(), temp_x.end());
+            a.x = temp_x[(filter_mid_x.size()+1)/2];
+
+            std::queue<double> temp_que_y = filter_mid_y;
+            std::vector<double> temp_y;
+            for(size_t i =0; i < filter_mid_y.size() ; i++){
+                temp_y.push_back(temp_que_y.front());
+                temp_que_y.pop();
+            }
+            std::sort(temp_y.begin(),temp_y.end());
+            a.y = temp_y[(filter_mid_y.size()+1)/2];
+
+            std::queue<double> temp_que_z = filter_mid_z;
+            std::vector<double> temp_z;
+            for(size_t i =0; i < filter_mid_z.size() ; i++){
+                temp_z.push_back(temp_que_z.front());
+                temp_que_z.pop();
+            }
+            std::sort(temp_z.begin(),temp_z.end());
+            a.z = temp_z[(filter_mid_z.size()+1)/2];
         }
         else {
-            q_cmd_x.push(a.x);
-
+            filter_mid_x.push(a.x);
+            filter_mid_y.push(a.y);
+            filter_mid_z.push(a.z);
         }
     }
     
@@ -470,11 +501,9 @@ private:
         printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
         saturate_yaw_rate(cmd.angular.z);
-        filter_vel(cmd.linear);
         printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
-
     }
     
     template<typename T>
@@ -491,6 +520,12 @@ private:
         p.y = y;
         p.z = z;
         UAV_Control_to_Point_earth(p);
+    }
+
+    template<typename T1, typename T2>
+    void UAV_Control_to_Point_with_facing(T1 ctrl_cmd, T2 p){
+        double yaw_diff = MyDataFun::angle_2d(UAV_pos, p) - UAV_Euler[2];
+        UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
     }
 
     void StepInit(){
@@ -565,13 +600,30 @@ private:
     }
 	
     void StepMapInit(){
-        map_init_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        map_init_theta = MyDataFun::angle_2d(UAV_pos, vsl_pos[vsl_id]);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
+        map_init_time = get_time_now();
     }
 
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
-        UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
+
+        double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        double nxt_theta = now_theta + 15 / MAP_TRA_RADIUS;
+
+        // double map_lin_vel = 5 / MAP_TRA_RADIUS;
+        // double map_time = get_time_now() - map_init_time;
+        // double map_theta = map_time * map_lin_vel + map_init_theta;
+        Point map_point;
+
+        double dis2vsl = sqrt(pow(vsl_pos[vsl_id].y - UAV_pos.y, 2) + pow(vsl_pos[vsl_id].x - UAV_pos.x, 2));
+
+        map_point.x = vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(nxt_theta);
+        map_point.y = vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(nxt_theta);
+        map_point.z = dis2vsl * tan(CAMERA_ANGLE * DEG2RAD);
+        printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
+        UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
+        // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
         if (0){
             task_state = HOLD;
             hold_time = get_time_now();
