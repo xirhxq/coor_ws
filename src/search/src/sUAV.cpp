@@ -200,29 +200,43 @@ public:
 
         // [Valid] Clock
         clock_sub = this->create_subscription<rosgraph_msgs::msg::Clock>(
-            "/clock", 10, std::bind(&sUAV::clock_callback, this, _1)
+            "/clock", 10, 
+            [this](const rosgraph_msgs::msg::Clock & msg){
+                this->clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
+            }
         );
 
         // [Valid] IMU Data: 1. Pose 2. Orientation
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
                 "/suav_" + std::to_string(sUAV_id) + "/imu/data", 10,
-                std::bind(&sUAV::imu_callback, this, _1));
-
+                [this](const sensor_msgs::msg::Imu & msg){
+                    MyDataFun::set_value_quaternion(this->UAV_att_imu, msg.orientation);
+                    double q[4];
+                    q[0] = msg.orientation.w;
+                    q[1] = msg.orientation.x;
+                    q[2] = msg.orientation.y;
+                    q[3] = msg.orientation.z;
+                    MyMathFun::quaternion_2_euler(q, this->UAV_Euler); 		// ENU
+                    MyMathFun::Euler_2_Dcm(this->UAV_Euler, this->R_e2b);		// Rotation Matrix: ENU to Body
+                }
+        );
 
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
                 "/suav_" + std::to_string(sUAV_id) + "/air_pressure", 10,
-                std::bind(&sUAV::alt_callback, this, _1));
+                [this](const sensor_msgs::msg::FluidPressure & msg){
+                    this->air_pressure = msg.fluid_pressure;
+                }
+        );
 
         // [Invalid] Groundtruth Pose of Quadrotors
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
                 "/model/suav_" + std::to_string(sUAV_id) + "/world_pose", 10,
-                std::bind(&sUAV::nav_callback, this, _1));
-
-        // [Invalid] Groundtruth Pose of USV
-        usv_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/usv/world_pose", 10,
-                std::bind(&sUAV::usv_pose_callback, this, _1));
+                [this](const geometry_msgs::msg::Pose & msg){
+                    MyDataFun::set_value(this->UAV_pos, msg.position);
+                    MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
+                }
+        );
 
         // [Invalid] Groundtruth Pose of Target Vessels
         for (int i = 0; i < VESSEL_NUM; i++){
@@ -246,14 +260,11 @@ public:
                 );
                 continue;
             }
-            auto fnc = [this](int i_){
-                return [i_, this](const std_msgs::msg::Int16 & msg) -> void{
-                    this->det_res[i_] = msg.data;
-                };
-            };
             det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
                 "/suav_" + std::to_string(i) + "/det_res", 10,
-                fnc(i)
+                [i, this](const std_msgs::msg::Int16 & msg) -> void{
+                    this->det_res[i] = msg.data;
+                }
             );
         }
 
@@ -272,7 +283,7 @@ public:
         double search_single_width = 70, search_signle_depth = 1000;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_x = -1450;
+        double search_backward_x = -1500;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 50;
         for (int i = 1; i <= loop; i++){
@@ -294,21 +305,6 @@ public:
     }
 
 private:
-
-    void clock_callback(const rosgraph_msgs::msg::Clock & msg){
-        clock = 1.0 * msg.clock.sec + 1.0 * msg.clock.nanosec / 1e9;
-    }
-    
-    void imu_callback(const sensor_msgs::msg::Imu & msg){
-        MyDataFun::set_value_quaternion(this->UAV_att_imu, msg.orientation);
-        double q[4];
-        q[0] = msg.orientation.w;
-        q[1] = msg.orientation.x;
-        q[2] = msg.orientation.y;
-        q[3] = msg.orientation.z;
-        MyMathFun::quaternion_2_euler(q, this->UAV_Euler); 		// ENU
-        MyMathFun::Euler_2_Dcm(this->UAV_Euler, this->R_e2b);		// Rotation Matrix: ENU to Body
-    }
 
 	void det_callback(const target_bbox_msgs::msg::BoundingBoxes & msg){
         for (int i = 0; i < int(msg.bounding_boxes.size()); i++){
@@ -334,21 +330,7 @@ private:
             
         }
 	}
-
-    void alt_callback(const sensor_msgs::msg::FluidPressure & msg){
-        air_pressure = msg.fluid_pressure;
-    }
-
-    void nav_callback(const geometry_msgs::msg::Pose & msg){
-        MyDataFun::set_value(this->UAV_pos, msg.position);
-        MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
-    }
-
-    void usv_pose_callback(const geometry_msgs::msg::Pose & msg){
-        MyDataFun::set_value(this->USV_pos, msg.position);
-    }
-
-    double get_time_now(){
+        double get_time_now(){
         return clock;
         // return this->get_clock()->now().seconds();
     }
@@ -369,7 +351,7 @@ private:
 
     template<typename T>
     bool pos_valid(T a){
-        return a.x >= -1300.0;
+        return a.x >= -1500.0 && a.x <= 1500.0 && a.y >= -1500.0 && a.y <= 1500.0;
     }
 
     template<typename T>
@@ -600,7 +582,7 @@ private:
     }
 	
     void StepMapInit(){
-        map_init_theta = MyDataFun::angle_2d(UAV_pos, vsl_pos[vsl_id]);
+        map_init_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
         map_init_time = get_time_now();
     }
@@ -608,18 +590,18 @@ private:
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
 
-        double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
-        double nxt_theta = now_theta + 15 / MAP_TRA_RADIUS;
+        // double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        // double nxt_theta = now_theta + 15 / MAP_TRA_RADIUS;
 
-        // double map_lin_vel = 5 / MAP_TRA_RADIUS;
-        // double map_time = get_time_now() - map_init_time;
-        // double map_theta = map_time * map_lin_vel + map_init_theta;
+        double map_ang_vel = 1 / MAP_TRA_RADIUS;
+        double map_time = get_time_now() - map_init_time;
+        double map_theta = map_time * map_ang_vel + map_init_theta;
         Point map_point;
 
         double dis2vsl = sqrt(pow(vsl_pos[vsl_id].y - UAV_pos.y, 2) + pow(vsl_pos[vsl_id].x - UAV_pos.x, 2));
 
-        map_point.x = vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(nxt_theta);
-        map_point.y = vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(nxt_theta);
+        map_point.x = vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(map_theta);
+        map_point.y = vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(map_theta);
         map_point.z = dis2vsl * tan(CAMERA_ANGLE * DEG2RAD);
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
@@ -745,7 +727,7 @@ private:
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, usv_sub, vsl_sub[VESSEL_NUM];
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, vsl_sub[VESSEL_NUM];
     rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_box_sub;
     rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr det_sub[UAV_NUM + 1];
     rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr det_pub;
