@@ -1,0 +1,1 @@
+time	day	hour	min	sec	control_state	uav_pos_x	uav_pos_y	uav_pos_z	uav_roll	uav_pitch	uav_yaw	uav_vel_x	uav_vel_y	uav_vel_z	

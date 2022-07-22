@@ -11,7 +11,7 @@ import re
 import numpy as np
 import matplotlib.animation as animation
 
-ptn = re.compile('.*_19-11_Manager.txt')
+ptn = re.compile('.*_19-53_Manager.txt')
 src = 'src/search/data/'
 files = os.listdir(src)
 
@@ -55,7 +55,7 @@ min_z, max_z = 1.1 * min_z - 0.1 * max_z, 1.1 * max_z - 0.1 * min_z
 ax.set_xlim(min_x, max_x)
 ax.set_ylim(min_y, max_y)
 ax.set_zlim(min_z, max_z)
-ax.view_init(0, -60)
+ax.view_init(30, -60)
 plt.gca().set_box_aspect((max_x - min_x, max_y - min_y,  (max_z - min_z)))
 plt.title('sUAV Trajectory')
 
