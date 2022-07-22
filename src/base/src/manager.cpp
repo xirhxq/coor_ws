@@ -11,6 +11,10 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+
+#include "MyMathFun.h"
+#include "MyDataFun.h"
 
 #define bUAV_NUM 6
 #define VESSEL_NUM 7
@@ -54,14 +58,6 @@ public:
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
         
         name_vec = {"time", "day", "hour", "min", "sec"};
-        for (int i = 0; i < VESSEL_NUM; i++){
-            for (int j = 0; j < 3; j++){
-                // "vessel_('a' + i)_('x' + j)"
-                std::string s = "vessel_";
-                s = s + char('a' + i) + '_' + char('x' + j);
-                name_vec.push_back(s);
-            }
-        }
         for (int i = 1; i <= bUAV_NUM; i++){
             for (int j = 0; j < 3; j++){
                 // 'suav_i_('x'+j)
@@ -83,28 +79,15 @@ public:
             }
         );
 
-        // [Invalid] Groundtruth Pose of Target Vessels
-        for (int i = 0; i < VESSEL_NUM; i++){
-            std::string chara_str;
-            chara_str = chara_str + char('A' + i);
-            std::cout << "Subscribe to /model/Vessel_" + chara_str + "/world_pose" << std::endl;
-            vsl_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
-                    "/model/Vessel_" + chara_str + "/world_pose", 10,
-                    [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
-                        this->real_vsl_pos[i] = msg.position;
-                    }
-            );
-        }
-
-        // [Invalid] Groundtruth Pose of UAVs
+        // [Valid] Pose of UAVs
         for (int i = 1; i <= bUAV_NUM; i++){
             std::string chara_str;
             chara_str = std::to_string(i);
-            std::cout << "Subscribe to /model/buav_" + chara_str + "/world_pose" << std::endl;
-            buav_sub[i] = this->create_subscription<geometry_msgs::msg::Pose>(
-                    "/model/buav_" + chara_str + "/world_pose", 10,
-                    [i, this](const geometry_msgs::msg::Pose & msg) -> void{     
-                        this->real_buav_pos[i] = msg.position;
+            std::cout << "Subscribe to /pose/groundtruth/buav_" + chara_str << std::endl;
+            buav_sub[i] = this->create_subscription<nav_msgs::msg::Odometry>(
+                    "/pose/groundtruth/buav_" + chara_str , 10,
+                    [i, this](const nav_msgs::msg::Odometry & msg) -> void{     
+                        MyDataFun::set_value(this->real_buav_pos[i], msg.pose.pose.position);
                     }
             );
         }
@@ -131,11 +114,6 @@ public:
                  << t->tm_hour << "\t"
                  << t->tm_min << "\t"
                  << t->tm_sec << "\t";
-        for (int i = 0; i < VESSEL_NUM; i++){
-            log_file << real_vsl_pos[i].x << "\t"
-                     << real_vsl_pos[i].y << "\t"
-                     << real_vsl_pos[i].z << "\t";
-        }
         for (int i = 1; i <= bUAV_NUM; i++){
             log_file << real_buav_pos[i].x << "\t"
                      << real_buav_pos[i].y << "\t"
@@ -152,8 +130,7 @@ public:
 private:
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr buav_sub[bUAV_NUM + 1];
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr vsl_sub[VESSEL_NUM];
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr buav_sub[bUAV_NUM + 1];
 };
 
 

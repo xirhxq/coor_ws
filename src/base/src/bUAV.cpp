@@ -14,6 +14,7 @@
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "std_msgs/msg/int16.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
@@ -90,15 +91,14 @@ public:
                 "/buav_" + std::to_string(bUAV_id) + "/imu/data", 10,
                 std::bind(&bUAV::imu_callback, this, _1));
 
-
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
                 "/buav_" + std::to_string(bUAV_id) + "/air_pressure", 10,
                 std::bind(&bUAV::alt_callback, this, _1));
 
-        // [Invalid] Groundtruth Pose of Quadrotor
-        nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/buav_" + std::to_string(bUAV_id) + "/world_pose", 10,
+        // [Valid] Pose of Quadrotor
+        nav_sub = this->create_subscription<nav_msgs::msg::Odometry>(
+                "/pose/groundtruth/buav_" + std::to_string(bUAV_id), 10,
                 std::bind(&bUAV::nav_callback, this, _1));
 
         // [Valid] Publish Quadrotor Velocity Command
@@ -137,9 +137,9 @@ private:
         air_pressure = msg.fluid_pressure;
     }
 
-    void nav_callback(const geometry_msgs::msg::Pose & msg){
-        MyDataFun::set_value(this->UAV_pos, msg.position);
-        MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
+    void nav_callback(const nav_msgs::msg::Odometry & msg){
+        MyDataFun::set_value(this->UAV_pos, msg.pose.pose.position);
+        MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.pose.pose.orientation);
     }
 
     double get_time_now(){
@@ -322,7 +322,7 @@ private:
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
-    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr nav_sub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
 };
 

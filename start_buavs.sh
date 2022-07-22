@@ -9,7 +9,7 @@ for i in "$@"; do
 done
 echo "Type anything to start control..."
 read b
-gnome-terminal --tab -- bash -c "ros2 run base manager"
+# gnome-terminal --tab -- bash -c "ros2 run base manager"
 for i in "$@"; do
 	gnome-terminal --tab -- bash -c "ros2 run base bUAV ${i}"
 done
