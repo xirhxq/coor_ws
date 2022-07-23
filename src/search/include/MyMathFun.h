@@ -1,4 +1,5 @@
 #include <cmath>
+#include <vector>
 
 #define PI std::acos(-1)
 #define DEG2RAD PI/180
@@ -13,12 +14,74 @@ namespace MyMathFun{
 		mean = std = rms = 0.0;
 		}
 		void new_data(double x){
-		cnt++;
-		std = pow(std, 2) / cnt * (cnt - 1) + (x - mean) * (x - mean) / cnt * (cnt - 1) / cnt;
-		std = pow(std, 0.5);
-		mean = mean / cnt * (cnt - 1) + x / cnt;
-		rms = pow(rms, 2) / cnt * (cnt - 1) + x * x / cnt;
-		rms = pow(rms, 0.5);
+			cnt++;
+			std = pow(std, 2) / cnt * (cnt - 1) + (x - mean) * (x - mean) / cnt * (cnt - 1) / cnt;
+			std = pow(std, 0.5);
+			mean = mean / cnt * (cnt - 1) + x / cnt;
+			rms = pow(rms, 2) / cnt * (cnt - 1) + x * x / cnt;
+			rms = pow(rms, 0.5);
+		}
+	};
+
+	struct Filter{
+		std::vector<double> v;
+		size_t size;
+
+		Filter(size_t sz_ = 3){
+			size = sz_;
+			while (!v.empty()) v.erase(v.begin());
+		}
+
+		void new_data(double nd_){
+			v.push_back(nd_);
+			// printf("push %lf size %ld\n", nd_, v.size());
+			// output();
+			while (v.size() > size) v.erase(v.begin());
+			// printf("now size %ld\n", v.size());
+			// output();
+		}
+
+		double result(){
+			std::vector<double> tmp = v;
+			std::sort(tmp.begin(), tmp.end());
+			return (tmp[(tmp.size() - 1) / 2] + tmp[tmp.size() / 2]) / 2;
+		}
+
+		void output(){
+			printf("Now Filter Contains:");
+			for (auto i: v) printf("\t%lf", i);
+			printf("\n");
+		}
+	};
+
+	template<typename T>
+	struct XYZ_Filter{
+		Filter x, y, z;
+		XYZ_Filter(int sz_ = 3): x(sz_), y(sz_), z(sz_){
+			
+		}
+
+		void new_data(T nd_){
+			// printf("push x\n");
+			x.new_data(nd_.x);
+			// printf("push y\n");
+			y.new_data(nd_.y);
+			// printf("push z\n");
+			z.new_data(nd_.z);
+		}
+
+		T result(){
+			T res;
+			res.x = x.result();
+			res.y = y.result();
+			res.z = z.result();
+			return res;
+		}
+
+		void output(){
+			x.output();
+			y.output();
+			z.output();
 		}
 	};
 

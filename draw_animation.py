@@ -76,7 +76,7 @@ for i in range(7):
     tmp_l = ax.plot(data[vsl_name + '_x'], data[vsl_name + '_y'], data[vsl_name + '_z'], color=color_list(i), label=vsl_name, alpha=0.8)
     l_vessel.append(tmp_l[0])
 
-ax.legend(loc=1, frameon=True, fontsize=7, ncol=2, edgecolor='grey')
+ax.legend(loc=1, frameon=True, fontsize=5, ncol=2, edgecolor='grey')
 
 min_x, max_x = 1.1 * min_x - 0.1 * max_x, 1.1 * max_x - 0.1 * min_x
 min_y, max_y = 1.1 * min_y - 0.1 * max_y, 1.1 * max_y - 0.1 * min_y

@@ -36,9 +36,9 @@ using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 int sUAV_id;
-std::queue<double>filter_mid_x;
-std::queue<double>filter_mid_y;
-std::queue<double>filter_mid_z;
+// std::queue<double>filter_mid_x;
+// std::queue<double>filter_mid_y;
+// std::queue<double>filter_mid_z;
 
 
 typedef enum TASK_CODE{
@@ -92,6 +92,9 @@ public:
 
     // [Invalid] Statistic values of target vessel position
     MyMathFun::DATA_STAT vsl_pos_stat[VESSEL_NUM];
+
+    // [Valid] MidFilter of target vessel position
+    MyMathFun::XYZ_Filter<Point> vsl_pos_fil[VESSEL_NUM];
 
     // Pixel x & y values of target
     double vis_vsl_pix[2];
@@ -313,7 +316,10 @@ private:
 			vis_vsl_flag = msg.bounding_boxes[i].flag;
 			vis_vsl_id = msg.bounding_boxes[i].class_id;
             // printf("Got Target: %s\n", vis_vsl_id.c_str());
+            if (vis_vsl_id.length() != 8) continue;
             vis_vsl_num = vis_vsl_id[vis_vsl_id.length() - 1] - 'a';
+            if (vis_vsl_num < 0 || vis_vsl_num > 6) continue;
+            // printf("visvslnum = %d\n", vis_vsl_num);
             MyMathFun::angle_transf(UAV_Euler, CAMERA_ANGLE * DEG2RAD, vis_vsl_pix, q_LOS_v);
             // printf("qlos: (%.2lf, %.2lf)\n", q_LOS_v[1] * RAD2DEG, q_LOS_v[2] * RAD2DEG);
             pos_err_v[2] = -UAV_pos.z;	
@@ -323,14 +329,17 @@ private:
             vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
             vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
             vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
-            filter_mid(vis_vsl_pos);
             if (!pos_valid(vis_vsl_pos)) continue;
+            // filter_mid(vis_vsl_pos);
+            vsl_pos_fil[vis_vsl_num].new_data(vis_vsl_pos);
+            vis_vsl_pos = vsl_pos_fil[vis_vsl_num].result();
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
             
         }
 	}
-        double get_time_now(){
+
+    double get_time_now(){
         return clock;
         // return this->get_clock()->now().seconds();
     }
@@ -370,52 +379,52 @@ private:
     // 中值滤波
     template<typename T>
     void filter_mid(T &a){
-        if (filter_mid_x.size() == 11) {
+        // if (filter_mid_x.size() == 11) {
             
-            filter_mid_x.pop();
-            filter_mid_x.push(a.x);
-            filter_mid_y.pop();
-            filter_mid_y.push(a.y);
-            filter_mid_z.pop();
-            filter_mid_z.push(a.z);
+        //     filter_mid_x.pop();
+        //     filter_mid_x.push(a.x);
+        //     filter_mid_y.pop();
+        //     filter_mid_y.push(a.y);
+        //     filter_mid_z.pop();
+        //     filter_mid_z.push(a.z);
 
-            std::queue<double> temp_que_x = filter_mid_x;
-            std::vector<double> temp_x;
-            temp_x.clear();
-            for(size_t i =0; i < filter_mid_x.size() ; i++){
-                temp_x.push_back(temp_que_x.front());
-                temp_que_x.pop();
-            }
-            // printf("temp before sort: %.6lf %.6lf %ld\n", temp_x[0], temp_x[temp_x.size() - 1], temp_x.size());
-            std::sort(temp_x.begin(),temp_x.end());
-            // printf("temp after sort: %.6lf %.6lf\n", temp_x[0], temp_x[temp_x.size() - 1]);
-            a.x = temp_x[(filter_mid_x.size()+1)/2];
+        //     std::queue<double> temp_que_x = filter_mid_x;
+        //     std::vector<double> temp_x;
+        //     temp_x.clear();
+        //     for(size_t i =0; i < filter_mid_x.size() ; i++){
+        //         temp_x.push_back(temp_que_x.front());
+        //         temp_que_x.pop();
+        //     }
+        //     // printf("temp before sort: %.6lf %.6lf %ld\n", temp_x[0], temp_x[temp_x.size() - 1], temp_x.size());
+        //     std::sort(temp_x.begin(),temp_x.end());
+        //     // printf("temp after sort: %.6lf %.6lf\n", temp_x[0], temp_x[temp_x.size() - 1]);
+        //     a.x = temp_x[(filter_mid_x.size()+1)/2];
 
-            std::queue<double> temp_que_y = filter_mid_y;
-            std::vector<double> temp_y;
-            for(size_t i =0; i < filter_mid_y.size() ; i++){
-                temp_y.push_back(temp_que_y.front());
-                temp_que_y.pop();
-            }
-            // printf("temp before sort: %.6lf %.6lf %ld\n", temp_y[0], temp_y[temp_x.size() - 1], temp_y.size());
-            std::sort(temp_y.begin(),temp_y.end());
-            // printf("temp after sort: %.6lf %.6lf\n", temp_y[0], temp_y[temp_x.size() - 1]);
-            a.y = temp_y[(filter_mid_y.size()+1)/2];
+        //     std::queue<double> temp_que_y = filter_mid_y;
+        //     std::vector<double> temp_y;
+        //     for(size_t i =0; i < filter_mid_y.size() ; i++){
+        //         temp_y.push_back(temp_que_y.front());
+        //         temp_que_y.pop();
+        //     }
+        //     // printf("temp before sort: %.6lf %.6lf %ld\n", temp_y[0], temp_y[temp_x.size() - 1], temp_y.size());
+        //     std::sort(temp_y.begin(),temp_y.end());
+        //     // printf("temp after sort: %.6lf %.6lf\n", temp_y[0], temp_y[temp_x.size() - 1]);
+        //     a.y = temp_y[(filter_mid_y.size()+1)/2];
 
-            std::queue<double> temp_que_z = filter_mid_z;
-            std::vector<double> temp_z;
-            for(size_t i =0; i < filter_mid_z.size() ; i++){
-                temp_z.push_back(temp_que_z.front());
-                temp_que_z.pop();
-            }
-            std::sort(temp_z.begin(),temp_z.end());
-            a.z = temp_z[(filter_mid_z.size()+1)/2];
-        }
-        else {
-            filter_mid_x.push(a.x);
-            filter_mid_y.push(a.y);
-            filter_mid_z.push(a.z);
-        }
+        //     std::queue<double> temp_que_z = filter_mid_z;
+        //     std::vector<double> temp_z;
+        //     for(size_t i =0; i < filter_mid_z.size() ; i++){
+        //         temp_z.push_back(temp_que_z.front());
+        //         temp_que_z.pop();
+        //     }
+        //     std::sort(temp_z.begin(),temp_z.end());
+        //     a.z = temp_z[(filter_mid_z.size()+1)/2];
+        // }
+        // else {
+        //     filter_mid_x.push(a.x);
+        //     filter_mid_y.push(a.y);
+        //     filter_mid_z.push(a.z);
+        // }
     }
     
     template<typename T>
@@ -668,6 +677,7 @@ private:
         printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
         printf("Time: %.2lf\n", task_time);
         printf("Me @ (%.2lf, %.2lf, %.2lf)\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
+        vsl_pos_fil[0].output();
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
         // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
