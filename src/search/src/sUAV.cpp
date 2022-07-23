@@ -615,7 +615,7 @@ private:
 
         map_point.x = vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(map_theta);
         map_point.y = vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(map_theta);
-        map_point.z = dis2vsl * tan(CAMERA_ANGLE * DEG2RAD);
+        map_point.z = std::max(UAV_pos.z, dis2vsl * tan(CAMERA_ANGLE * DEG2RAD));
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
         // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
