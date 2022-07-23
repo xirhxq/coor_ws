@@ -1,7 +1,7 @@
 #!/bin/bash
 gnome-terminal --tab -- bash -c "ros2 launch mbzirc_ros competition_local.launch.py ign_args:=\" -v 4 -r coast.sdf\" ;exec bash" 
 gnome-terminal --tab -- bash -c "ros2 run ros_ign_bridge my_bridge; exec bash"
-gnome-terminal --tab -- bash -c "ros2 launch vessel_det vessel_det_launch.py"
+gnome-terminal --tab -- bash -c "ros2 launch vessel_det test.py numbers:='$*'"
 echo "Type anything to spawn UAVs..."
 read a
 for i in "$@"; do

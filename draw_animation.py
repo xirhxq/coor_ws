@@ -19,7 +19,7 @@ target = 'search'
 total_num = 10 if target == 'search' else 6
 
 tic = time.time()
-ptn = re.compile('.*53_Manager.txt')
+ptn = re.compile('.*_Manager.txt')
 src = 'src/' + target + '/data/'
 
 txt_files = []
@@ -50,7 +50,9 @@ print(real_l)
 data = data.loc[(data[real_l]!=0).all(axis=1), :]
 print(data)
 
-total_length = int(len(data[target[0] + 'uav_1_x']) / 100)
+skip_num = 20
+
+total_length = int(len(data[target[0] + 'uav_1_x']) / skip_num)
 
 max_x, min_x, max_y, min_y, max_z, min_z = -2000, 2000, -2000, 2000, -2000, 2000
 l = []
@@ -68,6 +70,11 @@ for i in range(1, total_num + 1):
     max_z = max(max_z, max(data[target[0] + 'uav_' + uavnum + '_z']))
     min_z = min(min_z, min(data[target[0] + 'uav_' + uavnum + '_z']))
 
+l_vessel = []
+for i in range(7):
+    vsl_name = 'vessel_' + chr(ord('a') + i)
+    tmp_l = ax.plot(data[vsl_name + '_x'], data[vsl_name + '_y'], data[vsl_name + '_z'], color=color_list(i), label=vsl_name, alpha=0.8)
+    l_vessel.append(tmp_l[0])
 
 ax.legend(loc=1, frameon=True, fontsize=7, ncol=2, edgecolor='grey')
 
@@ -96,14 +103,19 @@ def update(num):
                                      elap_time, eta), end="")
     for i in range(1, total_num + 1):
         uavnum = str(i)
-        # print(data[target[0] + 'uav_' + uavnum + '_x'][0:100 * num + 1: 100].values.tolist())
-        l[i-1].set_data(data[target[0] + 'uav_' + uavnum + '_x'][0:100 * num + 1: 100].values.tolist(),
-                        data[target[0] + 'uav_' + uavnum + '_y'][0:100 * num + 1: 100].values.tolist())
-        l[i-1].set_3d_properties(data[target[0] + 'uav_' + uavnum + '_z'][0:100 * num + 1: 100].values.tolist())
-    return l
+        # print(data[target[0] + 'uav_' + uavnum + '_x'][0:skip_num * num + 1: skip_num].values.tolist())
+        l[i-1].set_data(data[target[0] + 'uav_' + uavnum + '_x'][0:skip_num * num + 1: skip_num].values.tolist(),
+                        data[target[0] + 'uav_' + uavnum + '_y'][0:skip_num * num + 1: skip_num].values.tolist())
+        l[i-1].set_3d_properties(data[target[0] + 'uav_' + uavnum + '_z'][0:skip_num * num + 1: skip_num].values.tolist())
+    for i in range(7):
+        vsl_name = 'vessel_' + chr(ord('a') + i)
+        l_vessel[i].set_data(data[vsl_name + '_x'][0:skip_num * num + 1: skip_num].values.tolist(),
+                             data[vsl_name + '_y'][0:skip_num * num + 1: skip_num].values.tolist())
+        l_vessel[i].set_3d_properties(data[vsl_name + '_z'][0:skip_num * num + 1: skip_num].values.tolist())
+    return l, l_vessel
 
 
-ani = animation.FuncAnimation(fig, update, total_length, interval=100, blit=False)
+ani = animation.FuncAnimation(fig, update, total_length, interval=skip_num, blit=False)
 ani.save(newest[:-4] + '.mp4', writer='ffmpeg', fps=15)
 print('\nCompleted!!!!!!!!!!!!!!!')
 # plt.savefig(newest[:-4] + '.png')

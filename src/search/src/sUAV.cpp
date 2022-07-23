@@ -323,7 +323,7 @@ private:
             vis_vsl_pos.x = UAV_pos.x + pos_err_v[0];
             vis_vsl_pos.y = UAV_pos.y + pos_err_v[1];
             vis_vsl_pos.z = UAV_pos.z + pos_err_v[2];
-            // filter_mid(vis_vsl_pos);
+            filter_mid(vis_vsl_pos);
             if (!pos_valid(vis_vsl_pos)) continue;
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
@@ -370,7 +370,7 @@ private:
     // 中值滤波
     template<typename T>
     void filter_mid(T &a){
-        if (filter_mid_x.size() == 5) {
+        if (filter_mid_x.size() == 11) {
             
             filter_mid_x.pop();
             filter_mid_x.push(a.x);
@@ -381,13 +381,14 @@ private:
 
             std::queue<double> temp_que_x = filter_mid_x;
             std::vector<double> temp_x;
+            temp_x.clear();
             for(size_t i =0; i < filter_mid_x.size() ; i++){
                 temp_x.push_back(temp_que_x.front());
                 temp_que_x.pop();
             }
-            printf("temp before sort: %.6lf %.6lf %ld\n", temp_x.begin(), temp_x.end(), temp_x.size());
+            // printf("temp before sort: %.6lf %.6lf %ld\n", temp_x[0], temp_x[temp_x.size() - 1], temp_x.size());
             std::sort(temp_x.begin(),temp_x.end());
-            printf("temp after sort: %.6lf %.6lf\n", temp_x.begin(), temp_x.end());
+            // printf("temp after sort: %.6lf %.6lf\n", temp_x[0], temp_x[temp_x.size() - 1]);
             a.x = temp_x[(filter_mid_x.size()+1)/2];
 
             std::queue<double> temp_que_y = filter_mid_y;
@@ -396,7 +397,9 @@ private:
                 temp_y.push_back(temp_que_y.front());
                 temp_que_y.pop();
             }
+            // printf("temp before sort: %.6lf %.6lf %ld\n", temp_y[0], temp_y[temp_x.size() - 1], temp_y.size());
             std::sort(temp_y.begin(),temp_y.end());
+            // printf("temp after sort: %.6lf %.6lf\n", temp_y[0], temp_y[temp_x.size() - 1]);
             a.y = temp_y[(filter_mid_y.size()+1)/2];
 
             std::queue<double> temp_que_z = filter_mid_z;
@@ -515,6 +518,7 @@ private:
         MyDataFun::set_value(birth_point, UAV_pos);
         MyDataFun::set_value(takeoff_point, UAV_pos);
         takeoff_point.z += 10 + sUAV_id * 2;
+        search_tra[0].z = takeoff_point.z;
         printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
         task_begin_time = get_time_now();
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
@@ -590,12 +594,12 @@ private:
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
 
-        // double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
-        // double nxt_theta = now_theta + 15 / MAP_TRA_RADIUS;
+        double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        double map_theta = now_theta + 20 / MAP_TRA_RADIUS;
 
-        double map_ang_vel = 1 / MAP_TRA_RADIUS;
-        double map_time = get_time_now() - map_init_time;
-        double map_theta = map_time * map_ang_vel + map_init_theta;
+        // double map_ang_vel = 1 / MAP_TRA_RADIUS;
+        // double map_time = get_time_now() - map_init_time;
+        // double map_theta = map_time * map_ang_vel + map_init_theta;
         Point map_point;
 
         double dis2vsl = sqrt(pow(vsl_pos[vsl_id].y - UAV_pos.y, 2) + pow(vsl_pos[vsl_id].x - UAV_pos.x, 2));
