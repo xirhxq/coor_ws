@@ -87,7 +87,7 @@ if target[0] == 'b':
     max_x = 0
 
 if scale == 'whole':
-    max_x = 3162.28
+    max_x = 3162.28 / 2
     min_x = -max_x
     max_y = max_x
     min_y = -max_y
