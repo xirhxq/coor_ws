@@ -34,11 +34,7 @@ namespace MyMathFun{
 
 		void new_data(double nd_){
 			v.push_back(nd_);
-			// printf("push %lf size %ld\n", nd_, v.size());
-			// output();
 			while (v.size() > size) v.erase(v.begin());
-			// printf("now size %ld\n", v.size());
-			// output();
 		}
 
 		double result(){
@@ -62,11 +58,8 @@ namespace MyMathFun{
 		}
 
 		void new_data(T nd_){
-			// printf("push x\n");
 			x.new_data(nd_.x);
-			// printf("push y\n");
 			y.new_data(nd_.y);
-			// printf("push z\n");
 			z.new_data(nd_.z);
 		}
 
@@ -114,8 +107,7 @@ namespace MyMathFun{
     }
     
     //solve target angle from zc
-	void angle_transf(double euler[3], double bias, double pixel[2],double q[3])
-	{
+	void angle_transf(double euler[3], double bias, double pixel[2],double q[3]){
 		//q_alpha: pitch->pixel[1]
 		//q_beta: 
 		pixel[0] = -pixel[0]; 
@@ -128,6 +120,5 @@ namespace MyMathFun{
 		q[1] = asin(sin(theta)*cos(pixel[1])*cos(pixel[0])+cos(theta)*cos(euler[0])*sin(pixel[1])+cos(theta)*sin(euler[0])*cos(pixel[1])*sin(pixel[0]));
 		q[2] = atan2(-M1,N1);
 	}
-
 }
 	

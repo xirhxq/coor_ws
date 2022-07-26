@@ -15,6 +15,7 @@
 #include "sensor_msgs/msg/fluid_pressure.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
+typedef geometry_msgs::msg::Point Point;
 #include "geometry_msgs/msg/pose.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "target_bbox_msgs/msg/bounding_boxes.hpp"
@@ -23,7 +24,6 @@
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
-typedef geometry_msgs::msg::Point Point;
 
 #define UAV_NUM 10
 #define VESSEL_NUM 7
@@ -38,10 +38,6 @@ using namespace std::chrono_literals;
 using std::placeholders::_1;
 
 int sUAV_id;
-// std::queue<double>filter_mid_x;
-// std::queue<double>filter_mid_y;
-// std::queue<double>filter_mid_z;
-
 
 typedef enum TASK_CODE{
     INIT,
@@ -142,6 +138,9 @@ public:
 
     // UAV task state
     STATE_CODE  task_state;
+
+    // [StepInit] Takeoff Command
+    int16_t cmd;
 
     // [StepSearch] Preset Search Trajectory
     std::vector<Point> search_tra;
@@ -291,6 +290,15 @@ public:
             "/buav_" + std::to_string(sUAV_id) + "/tx", 10
         );
 
+        // [Valid] Commander 
+        cmd_sub = this->create_subscription<std_msgs::msg::Int16>(
+            "/commander_cmd", 10, 
+            [this](const std_msgs::msg::Int16 & msg){
+                this->cmd = msg.data;
+            }
+        );
+        
+
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
         sat_vel.x = 5;
         sat_vel.y = 5;
@@ -388,57 +396,6 @@ private:
         if (a <= -PI) a += 2 * PI;
         if (a >= PI) a -= 2 * PI;
         a = MyMathFun::LimitValue(a, sat_yaw_rate);
-    }
-
-    // 中值滤波
-    template<typename T>
-    void filter_mid(T &a){
-        // if (filter_mid_x.size() == 11) {
-            
-        //     filter_mid_x.pop();
-        //     filter_mid_x.push(a.x);
-        //     filter_mid_y.pop();
-        //     filter_mid_y.push(a.y);
-        //     filter_mid_z.pop();
-        //     filter_mid_z.push(a.z);
-
-        //     std::queue<double> temp_que_x = filter_mid_x;
-        //     std::vector<double> temp_x;
-        //     temp_x.clear();
-        //     for(size_t i =0; i < filter_mid_x.size() ; i++){
-        //         temp_x.push_back(temp_que_x.front());
-        //         temp_que_x.pop();
-        //     }
-        //     // printf("temp before sort: %.6lf %.6lf %ld\n", temp_x[0], temp_x[temp_x.size() - 1], temp_x.size());
-        //     std::sort(temp_x.begin(),temp_x.end());
-        //     // printf("temp after sort: %.6lf %.6lf\n", temp_x[0], temp_x[temp_x.size() - 1]);
-        //     a.x = temp_x[(filter_mid_x.size()+1)/2];
-
-        //     std::queue<double> temp_que_y = filter_mid_y;
-        //     std::vector<double> temp_y;
-        //     for(size_t i =0; i < filter_mid_y.size() ; i++){
-        //         temp_y.push_back(temp_que_y.front());
-        //         temp_que_y.pop();
-        //     }
-        //     // printf("temp before sort: %.6lf %.6lf %ld\n", temp_y[0], temp_y[temp_x.size() - 1], temp_y.size());
-        //     std::sort(temp_y.begin(),temp_y.end());
-        //     // printf("temp after sort: %.6lf %.6lf\n", temp_y[0], temp_y[temp_x.size() - 1]);
-        //     a.y = temp_y[(filter_mid_y.size()+1)/2];
-
-        //     std::queue<double> temp_que_z = filter_mid_z;
-        //     std::vector<double> temp_z;
-        //     for(size_t i =0; i < filter_mid_z.size() ; i++){
-        //         temp_z.push_back(temp_que_z.front());
-        //         temp_que_z.pop();
-        //     }
-        //     std::sort(temp_z.begin(),temp_z.end());
-        //     a.z = temp_z[(filter_mid_z.size()+1)/2];
-        // }
-        // else {
-        //     filter_mid_x.push(a.x);
-        //     filter_mid_y.push(a.y);
-        //     filter_mid_z.push(a.z);
-        // }
     }
     
     template<typename T>
@@ -547,12 +504,15 @@ private:
     // }
 
     void StepInit(){
-        UAV_Control_earth(0, 0, 0, 0);
+        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
         MyDataFun::set_value(birth_point, UAV_pos);
         MyDataFun::set_value(takeoff_point, UAV_pos);
         takeoff_point.z += 10 + sUAV_id * 2;
         search_tra[0].z = takeoff_point.z;
-        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
+        if (cmd != 233){
+            return;
+        }
+        UAV_Control_earth(0, 0, 0, 0);
         task_begin_time = get_time_now();
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
             printf("Get Ground Truth Position!!!!!!!!!!!!!!!!!!!!!!\n");
@@ -772,6 +732,7 @@ private:
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
     rclcpp::Subscription<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_sub;
     rclcpp::Publisher<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_pub;
+    rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr cmd_sub;
 };
 
 

@@ -11,6 +11,7 @@ done
 echo "Type anything to start control..."
 read b
 gnome-terminal --tab -- bash -c "ros2 run search manager"
+gnome-terminal --tab -- bash -c "ros2 run search commander"
 for i in "$@"; do
 	if test $i -gt 5
 	then

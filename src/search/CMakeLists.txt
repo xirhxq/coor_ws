@@ -34,6 +34,7 @@ set(list
 sUAV
 manager
 c47v
+commander
 )
 
 foreach(l ${list})
