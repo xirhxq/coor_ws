@@ -18,6 +18,8 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "target_bbox_msgs/msg/bounding_boxes.hpp"
+#include "ros_ign_interfaces/msg/dataframe.hpp"
+
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
@@ -246,7 +248,7 @@ public:
             std::string chara_str;
             chara_str = chara_str + char('A' + i);
             auto fnc = [this](int i_){
-                return [i_, this](const geometry_msgs::msg::Pose & msg) -> void{     
+                return [i_, this](const geometry_msgs::msg::Pose & msg) -> void{    
                     this->real_vsl_pos[i_] = msg.position;
                 };
             };
@@ -276,6 +278,18 @@ public:
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/suav_" + std::to_string(sUAV_id) + "/cmd_vel", 10);
 
+        // [Valid] Received data
+        com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
+            "/buav_" + std::to_string(sUAV_id) + "/rx", 10, 
+            [this](const ros_ign_interfaces::msg::Dataframe & msg){
+                // printf("I heard msg with strength %lf\n", msg.rssi);
+            }
+        );
+
+        // [Valid] Published data
+        com_pub = this->create_publisher<ros_ign_interfaces::msg::Dataframe>(
+            "/buav_" + std::to_string(sUAV_id) + "/tx", 10
+        );
 
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
         sat_vel.x = 5;
@@ -522,6 +536,16 @@ private:
         UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
     }
 
+    // template<typename T1, typename T2>
+    // void Relay_Common(){
+    //     ros_ign_interfaces::msg::Dataframe Data_Send;
+    //     ros_ign_interfaces::msg::Dataframe Data_Reciv;
+        
+    //     Data_send.src_address="/suav_" + std::to_string(sUAV_id)
+    //     Data_send.src_address="/suav_" + std::to_string(sUAV_id)
+    //     Data_send.data.push_back(233);
+    // }
+
     void StepInit(){
         UAV_Control_earth(0, 0, 0, 0);
         MyDataFun::set_value(birth_point, UAV_pos);
@@ -746,6 +770,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr det_sub[UAV_NUM + 1];
     rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr det_pub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
+    rclcpp::Subscription<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_sub;
+    rclcpp::Publisher<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_pub;
 };
 
 

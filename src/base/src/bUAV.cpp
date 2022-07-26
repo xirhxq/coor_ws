@@ -15,6 +15,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "ros_ign_interfaces/msg/dataframe.hpp"
 
 #include "MyMathFun.h"
 #include "MyDataFun.h"
@@ -96,14 +97,37 @@ public:
                 "/buav_" + std::to_string(bUAV_id) + "/air_pressure", 10,
                 std::bind(&bUAV::alt_callback, this, _1));
 
-        // [Valid] Pose of Quadrotor
-        nav_sub = this->create_subscription<nav_msgs::msg::Odometry>(
-                "/pose/groundtruth/buav_" + std::to_string(bUAV_id), 10,
-                std::bind(&bUAV::nav_callback, this, _1));
+        // // [Valid] Pose of Quadrotor
+        // nav_sub = this->create_subscription<nav_msgs::msg::Odometry>(
+        //         "/pose/groundtruth/buav_" + std::to_string(bUAV_id), 10,
+        //         std::bind(&bUAV::nav_callback, this, _1));
+
+        // [Invalid] Groundtruth Pose of Quadrotors
+        nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
+                "/model/buav_" + std::to_string(bUAV_id) + "/world_pose", 10,
+                [this](const geometry_msgs::msg::Pose & msg){
+                    MyDataFun::set_value(this->UAV_pos, msg.position);
+                    MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
+                }
+        );
 
         // [Valid] Publish Quadrotor Velocity Command
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
                 "/buav_" + std::to_string(bUAV_id) + "/cmd_vel", 10);
+
+
+        // [Valid] Received data
+        com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
+            "/buav_" + std::to_string(bUAV_id) + "/rx", 10, 
+            [this](const ros_ign_interfaces::msg::Dataframe & msg){
+                // printf("I heard msg with strength %lf\n", msg.rssi);
+            }
+        );
+
+        // [Valid] Published data
+        com_pub = this->create_publisher<ros_ign_interfaces::msg::Dataframe>(
+            "/buav_" + std::to_string(bUAV_id) + "/tx", 10
+        );
 
 
         timer_ = this->create_wall_timer(50ms, std::bind(&bUAV::timer_callback, this));
@@ -286,6 +310,14 @@ private:
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
 
+        // From 1 -> 2
+        if (bUAV_id == 1){
+            ros_ign_interfaces::msg::Dataframe new_data;
+            new_data.src_address = "buav_1";
+            new_data.dst_address = "buav_2";
+            new_data.data.push_back(233);
+            com_pub->publish(new_data);
+        }
         switch (task_state){
             case INIT:{
                 StepInit();
@@ -322,8 +354,11 @@ private:
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr nav_sub;
+    // rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr nav_sub;
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
+    rclcpp::Subscription<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_sub;
+    rclcpp::Publisher<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_pub;
 };
 
 

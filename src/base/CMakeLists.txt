@@ -10,6 +10,7 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(ros_ign_interfaces REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -30,11 +31,12 @@ include_directories(
 set(list
 bUAV
 manager
+com_manager
 )
 
 foreach(l ${list})
   add_executable(${l} src/${l}.cpp)
-  ament_target_dependencies(${l} rclcpp sensor_msgs nav_msgs)
+  ament_target_dependencies(${l} rclcpp sensor_msgs nav_msgs ros_ign_interfaces)
   install(TARGETS
   ${l}
     DESTINATION lib/${PROJECT_NAME})

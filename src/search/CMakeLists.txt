@@ -11,6 +11,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(target_bbox_msgs REQUIRED)
+find_package(ros_ign_interfaces REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -37,7 +38,7 @@ c47v
 
 foreach(l ${list})
   add_executable(${l} src/${l}.cpp)
-  ament_target_dependencies(${l} rclcpp sensor_msgs nav_msgs target_bbox_msgs)
+  ament_target_dependencies(${l} rclcpp sensor_msgs nav_msgs target_bbox_msgs ros_ign_interfaces)
   install(TARGETS
   ${l}
     DESTINATION lib/${PROJECT_NAME})
