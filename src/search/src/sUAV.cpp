@@ -181,6 +181,9 @@ public:
     // [StepMap] Initial time
     double map_init_time;
 
+    // [StepMap] Half loop flag
+    bool half_loop_flag;
+
     sUAV(char *name) : Node("suav_" + std::string(name)) {
         sUAV_id = std::atoi(name);
 
@@ -390,7 +393,7 @@ private:
 
     template<typename T>
     bool pos_valid(T a){
-        return a.x >= -1500.0 && a.x <= 1500.0 && a.y >= -1500.0 && a.y <= 1500.0;
+        return a.x >= -1470.0 && a.x <= 1500.0 && a.y >= -1500.0 && a.y <= 1500.0;
     }
 
     template<typename T>
@@ -515,6 +518,7 @@ private:
         printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
         MyDataFun::set_value(birth_point, UAV_pos);
         MyDataFun::set_value(takeoff_point, UAV_pos);
+        birth_point.z -= 10;
         takeoff_point.z += 10 + sUAV_id * 2;
         search_tra[0].z = takeoff_point.z;
         if (cmd != 233){
@@ -555,7 +559,7 @@ private:
     void StepSearch(){
      	printf("Search!!!\n");
         // UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
-        double yaw_diff = MyDataFun::angle_2d(UAV_pos, MyDataFun::minus(search_tra[search_tra_finish], UAV_pos)) - UAV_Euler[2];
+        double yaw_diff = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]) - UAV_Euler[2];
         yaw_diff += std::sin((get_time_now() - search_time) / 5) * PI / 3;
         if (MyDataFun::dis_2d(search_tra[search_tra_finish], UAV_pos) <= 5) yaw_diff = 0;
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
@@ -585,7 +589,7 @@ private:
                     det_res[sUAV_id] += 1 << i;
                 }
                 if ((map_res >> i) & 1){
-                    printf("Already Mapped Vessel %c", 'A' + i);
+                    printf("Already Mapped Vessel %c\n", 'A' + i);
                     continue;
                 }
                 vsl_id = i;
@@ -604,12 +608,19 @@ private:
         if (!((map_res >> vsl_id) & 1)) {
             map_res += (1 << vsl_id);
         }
+        half_loop_flag = false;
     }
 
     void StepMap(){
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
 
         double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        printf("Now theta: %.2lf\n", now_theta * RAD2DEG);
+
+        if (abs(now_theta - map_init_theta + PI) <= 5 * DEG2RAD
+        || abs(now_theta - map_init_theta + 3 * PI) <= 5 * DEG2RAD
+        || abs(now_theta - map_init_theta - PI) <= 5 * DEG2RAD)
+            half_loop_flag = true;
         double map_theta = now_theta + 20 / MAP_TRA_RADIUS;
 
         // double map_ang_vel = 1 / MAP_TRA_RADIUS;
@@ -625,8 +636,12 @@ private:
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
         // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
-        if (get_time_now() - map_init_time >= 100){
+        // if (get_time_now() - map_init_time >= 150){
+        //     task_state = SEARCH;
+        // }
+        if (abs(now_theta - map_init_theta) <= 5 * DEG2RAD && half_loop_flag){
             task_state = SEARCH;
+            half_loop_flag = false;
         }
         if (0){
             task_state = HOLD;

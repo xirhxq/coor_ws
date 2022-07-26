@@ -14,7 +14,8 @@ import matplotlib.animation as animation
 import time
 import math
 
-target = 'search'
+target = 'search' # 'search' or 'base'
+scale = 'whole' # 'whole' or 'tight'
 
 total_num = 10 if target == 'search' else 6
 
@@ -84,6 +85,12 @@ min_z, max_z = 1.1 * min_z - 0.1 * max_z, 1.1 * max_z - 0.1 * min_z
 
 if target[0] == 'b':
     max_x = 0
+
+if scale == 'whole':
+    max_x = 3162.28
+    min_x = -max_x
+    max_y = max_x
+    min_y = -max_y
 
 ax.set_xlim(min_x, max_x)
 ax.set_ylim(min_y, max_y)
