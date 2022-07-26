@@ -27,7 +27,7 @@ namespace MyMathFun{
 		std::vector<double> v;
 		size_t size;
 
-		Filter(size_t sz_ = 3){
+		Filter(size_t sz_){
 			size = sz_;
 			while (!v.empty()) v.erase(v.begin());
 		}
@@ -53,7 +53,7 @@ namespace MyMathFun{
 	template<typename T>
 	struct XYZ_Filter{
 		Filter x, y, z;
-		XYZ_Filter(int sz_ = 3): x(sz_), y(sz_), z(sz_){
+		XYZ_Filter(int sz_ = 11): x(sz_), y(sz_), z(sz_){
 			
 		}
 

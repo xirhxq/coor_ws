@@ -8,6 +8,8 @@
 #include <ctime>
 #include <cmath>
 
+#include "Utils.h"
+
 #include "rclcpp/rclcpp.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "geometry_msgs/msg/pose.hpp"
@@ -145,8 +147,59 @@ public:
     }
 
     void timer_callback(){
+        std::cout << "\033c" << std::flush;
         log_once();
+        output_map();
         // printf("Log!\n");
+    }
+
+    void output_map(){
+        const int l = 45, w = 101;
+        char mp[l][w];
+        for (int i = 0; i < l; i++){
+            for (int j = 0; j < w; j++){
+                mp[i][j] = ' ';
+            }
+        }
+        const double max_l = 3162.28;
+        auto f = [max_l](double d, int a)->int{
+            int res = int((d + max_l / 2) / max_l * a);
+            assert(res >= 0 && res < a);
+            return res;
+        };
+        for (int i = 1; i < sUAV_NUM; i++){
+            for (int k = 0; k < l; k++){
+                mp[k][int(1.0 * i / sUAV_NUM * w)] = '|';
+            }
+        }
+        for (int i = 0; i < VESSEL_NUM; i++){
+            mp[l - 1 - f(real_vsl_pos[i].x, l)][w - 1 - f(real_vsl_pos[i].y, w)] = 'A' + i;
+        }
+        for (int i = 1; i <= sUAV_NUM; i++){
+            char c = i == 10? '0' : '0' + i;
+            if (real_suav_pos[i].z <= 1) continue;
+            mp[l - 1 - f(real_suav_pos[i].x, l)][w - 1 - f(real_suav_pos[i].y, w)] = c;
+        }
+        std::cout << "Now Map:" << std::endl;
+        std::cout << "+";
+        for (int j = 0; j < w; j++) std::cout << "-";
+        std::cout << "+" << std::endl;
+        for (int i = 0; i < l; i++){
+            std::cout << "|";
+            for (int j = 0; j < w; j++){
+                if (mp[i][j] >= 'A' && mp[i][j] <= 'G'){
+                    std::cout << BOLDGREEN << mp[i][j] << RESET;
+                }
+                else if (mp[i][j] >= '0' && mp[i][j] <= '9'){
+                    std::cout << BOLDYELLOW << mp[i][j] << RESET;
+                }
+                else std::cout << mp[i][j];
+            }
+            std::cout << "|" << std::endl;
+        }
+        std::cout << "+";
+        for (int j = 0; j < w; j++) std::cout << "-";
+        std::cout << "+" << std::endl;
     }
 
 private:

@@ -142,6 +142,9 @@ public:
     // [StepInit] Takeoff Command
     int16_t cmd;
 
+    // [StepSearch] Search Time
+    double search_time;
+
     // [StepSearch] Preset Search Trajectory
     std::vector<Point> search_tra;
 
@@ -162,6 +165,9 @@ public:
 
     // Camera angle
     const double CAMERA_ANGLE = 30;
+
+    // [StepMap] Map vessel id list
+    int map_res;
 
     // [StepMap] Map trajectory height
     const double MAP_TRA_HEIGHT = 30;
@@ -318,6 +324,7 @@ public:
             search_tra.push_back(MyDataFun::new_point(search_forward_x, search_backward_y, search_height));
             search_tra.push_back(MyDataFun::new_point(search_backward_x, search_backward_y, search_height));
         }
+        map_res = 0;
 
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
@@ -537,6 +544,7 @@ private:
             printf("Prepare Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = SEARCH;
             search_tra_finish = 0;
+            search_time = get_time_now();
 
             // [Valid] Result of Detecting
             det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
@@ -546,7 +554,11 @@ private:
 
     void StepSearch(){
      	printf("Search!!!\n");
-        UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
+        // UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
+        double yaw_diff = MyDataFun::angle_2d(UAV_pos, MyDataFun::minus(search_tra[search_tra_finish], UAV_pos)) - UAV_Euler[2];
+        yaw_diff += std::sin((get_time_now() - search_time) / 5) * PI / 3;
+        if (MyDataFun::dis_2d(search_tra[search_tra_finish], UAV_pos) <= 5) yaw_diff = 0;
+        UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
         if (is_near(search_tra[search_tra_finish], 1)){
             search_tra_finish++;
             printf("#%d Trajectory Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", search_tra_finish);
@@ -569,9 +581,15 @@ private:
                     }
                 }
                 if (other_flag) continue;
-                det_res[sUAV_id] += 1 << i;
+                if (!((det_res[sUAV_id] >> i) & 1)){
+                    det_res[sUAV_id] += 1 << i;
+                }
+                if ((map_res >> i) & 1){
+                    printf("Already Mapped Vessel %c", 'A' + i);
+                    continue;
+                }
                 vsl_id = i;
-                search_tra_finish = 0;
+                // search_tra_finish = 0;
                 task_state = MAP;
                 StepMapInit();
             }
@@ -583,6 +601,9 @@ private:
         map_init_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
         printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
         map_init_time = get_time_now();
+        if (!((map_res >> vsl_id) & 1)) {
+            map_res += (1 << vsl_id);
+        }
     }
 
     void StepMap(){
@@ -604,6 +625,9 @@ private:
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
         // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
+        if (get_time_now() - map_init_time >= 100){
+            task_state = SEARCH;
+        }
         if (0){
             task_state = HOLD;
             hold_time = get_time_now();
@@ -661,7 +685,7 @@ private:
         update_time();
         printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
         printf("Time: %.2lf\n", task_time);
-        printf("Me @ (%.2lf, %.2lf, %.2lf)\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
+        printf("sUAV #%d @ (%.2lf, %.2lf, %.2lf)\n", sUAV_id, UAV_pos.x, UAV_pos.y, UAV_pos.z);
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
         // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
