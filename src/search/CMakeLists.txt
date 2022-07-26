@@ -13,6 +13,10 @@ find_package(std_msgs REQUIRED)
 find_package(target_bbox_msgs REQUIRED)
 find_package(ros_ign_interfaces REQUIRED)
 
+
+install(FILES launch/spawn_suav.py
+DESTINATION share/${PROJECT_NAME}/launch)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights

@@ -281,7 +281,7 @@ public:
         com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
             "/buav_" + std::to_string(sUAV_id) + "/rx", 10, 
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
-                // printf("I heard msg with strength %lf\n", msg.rssi);
+                printf("I heard msg with strength %lf\n", msg.rssi);
             }
         );
 
@@ -305,10 +305,11 @@ public:
         sat_vel.z = 5;
         sat_yaw_rate = 90 * DEG2RAD;
         loop = 1;
-        double search_single_width = 70, search_signle_depth = 1000;
+        double side_length = 3062.28;
+        double search_single_width = side_length / 10, search_signle_depth = side_length;
         double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
         double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_x = -1500;
+        double search_backward_x = -side_length / 2.0;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 50;
         for (int i = 1; i <= loop; i++){
@@ -599,7 +600,7 @@ private:
 
         map_point.x = vsl_pos[vsl_id].x + MAP_TRA_RADIUS * cos(map_theta);
         map_point.y = vsl_pos[vsl_id].y + MAP_TRA_RADIUS * sin(map_theta);
-        map_point.z = std::max(UAV_pos.z, dis2vsl * tan(CAMERA_ANGLE * DEG2RAD));
+        map_point.z = std::min(UAV_pos.z, dis2vsl * tan(CAMERA_ANGLE * DEG2RAD));
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
         // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
@@ -661,7 +662,6 @@ private:
         printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
         printf("Time: %.2lf\n", task_time);
         printf("Me @ (%.2lf, %.2lf, %.2lf)\n", UAV_pos.x, UAV_pos.y, UAV_pos.z);
-        vsl_pos_fil[0].output();
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
         // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);

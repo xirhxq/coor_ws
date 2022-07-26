@@ -4,10 +4,11 @@ gnome-terminal --tab -- bash -c "ros2 run ros_ign_bridge my_bridge; exec bash"
 gnome-terminal --tab -- bash -c "ros2 launch vessel_det test.py numbers:='$*'"
 echo "Type anything to spawn UAVs..."
 read a
-for i in "$@"; do
-	xxx=`expr 0 - $i \* 2 - 1490`
-	gnome-terminal --tab -- bash -c "sleep 2; ros2 launch mbzirc_ign spawn.launch.py name:=suav_$i world:=coast model:=mbzirc_quadrotor x:=${xxx} y:=0 z:=4.3 R:=0 P:=0 Y:=0 slot0:=mbzirc_hd_camera slot0_rpy:=\"0 20 0\" gripper:=mbzirc_suction_gripper flightTime:=60; exec bash"
-done
+gnome-terminal --tab -- bash -c "sleep 2; ros2 launch search spawn_suav.py numbers:='$*'"
+# for i in "$@"; do
+# 	xxx=`expr 0 - $i \* 2 - 1490`
+# 	gnome-terminal --tab -- bash -c "sleep 2; ros2 launch mbzirc_ign spawn.launch.py name:=suav_$i world:=coast model:=mbzirc_quadrotor x:=${xxx} y:=0 z:=4.3 R:=0 P:=0 Y:=0 slot0:=mbzirc_hd_camera slot0_rpy:=\"0 30 0\" gripper:=mbzirc_suction_gripper flightTime:=60; exec bash"
+# done
 echo "Type anything to start control..."
 read b
 gnome-terminal --tab -- bash -c "ros2 run search manager"
