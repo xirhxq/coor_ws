@@ -6,7 +6,7 @@ import shutil
 
 base_dir = 'src/base/data/'
 
-ls = [l for l in os.listdir(base_dir) if '.txt' in l or '.png' in l or '.mp4' in l or '.gif' in l]
+ls = [l for l in os.listdir(base_dir) if '.txt' in l or '.png' in l or '.mp4' in l or '.gif' in l or '.jpg' in l]
 
 for l in ls:
     date = l[:5]

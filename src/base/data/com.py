@@ -68,5 +68,5 @@ plt.ylabel('Package success rate (%)')
 
 ax.plot(data['dis'], success_rate)
 
-plt.savefig(newest[:-4] + 'package_loss.jpg')
+plt.savefig(newest[:-11] + 'package_loss.jpg')
 plt.show()
