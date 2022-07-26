@@ -156,6 +156,9 @@ public:
 
     // [StepSearch] Detecing Results of Other UAVs
     int det_res[UAV_NUM + 1];
+
+    // [StepSearch] Detection success counter
+    int det_cnt[VESSEL_NUM];
     
     // [StepMap] Vessel ID to map
     int vsl_id;
@@ -367,6 +370,7 @@ private:
             vsl_pos_fil[vis_vsl_num].new_data(vis_vsl_pos);
             vis_vsl_pos = vsl_pos_fil[vis_vsl_num].result();
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
+            det_cnt[vis_vsl_num]++;
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
             
         }
@@ -553,6 +557,7 @@ private:
             // [Valid] Result of Detecting
             det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
             "/suav_" + std::to_string(sUAV_id) + "/slot0/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
+            memset(det_cnt, 0, sizeof(det_cnt));
         }
     }
 
@@ -574,7 +579,7 @@ private:
             }
         }
         for (int i = 0; i < VESSEL_NUM; i++){
-            if (is_near_2d(vsl_pos[i], 3000) && vsl_pos_stat[i].cnt >= 50){
+            if (is_near_2d(vsl_pos[i], 3000) && det_cnt[i] >= 50){
                 printf("Got Vessel %c !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", 'A' + i);
                 bool other_flag = false;
                 for (int j = 1; j <= UAV_NUM; j++){
@@ -698,7 +703,7 @@ private:
 
     void timer_callback() {
         update_time();
-        printf("---------------------------------\n-----------A New Frame-----------\n---------------------------------\n");
+        std::cout << "\033c" << std::flush;
         printf("Time: %.2lf\n", task_time);
         printf("sUAV #%d @ (%.2lf, %.2lf, %.2lf)\n", sUAV_id, UAV_pos.x, UAV_pos.y, UAV_pos.z);
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
@@ -710,9 +715,17 @@ private:
         //     printf("Vessel %c: %s by vision, %s by cheat, mean=%.4lf, std=%.4lf, rms=%.4lf cnt=%d\n", 'A' + i, MyDataFun::output_str(vsl_pos[i]).c_str(), MyDataFun::output_str(real_vsl_pos[i]).c_str(),
         //      vsl_pos_stat[i].mean, vsl_pos_stat[i].std, vsl_pos_stat[i].rms, vsl_pos_stat[i].cnt);
         // }
-        printf("Detection Status: ");
+        printf("Detection Counter: ");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            printf("%c:(%d) ", 'A' + i, det_cnt[i]);
+        }
+        printf("\nDetection Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
             if (det_res[sUAV_id] >> i & 1) printf("%c", 'A' + i);
+        }
+        printf("\nMap Status: ");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            if (map_res >> i & 1) printf("%c", 'A' + i);
         }
         printf("\n");
 
