@@ -21,6 +21,13 @@ namespace MyDataFun{
         a.z = b[2];
     }
 
+    template<typename T>
+    void set_value(T &a, double x, double y, double z){
+        a.x = x;
+        a.y = y;
+        a.z = z;
+    }
+
     template<typename T1, typename T2>
     void set_value_quaternion(T1 &a, T2 b){
         a.x = b.x;

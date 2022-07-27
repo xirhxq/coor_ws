@@ -159,6 +159,9 @@ public:
 
     // [StepSearch] Detection success counter
     int det_cnt[VESSEL_NUM];
+
+    // [StepSearch] Vessel position result altogether
+    Point vsl_det_pos[VESSEL_NUM];
     
     // [StepMap] Vessel ID to map
     int vsl_id;
@@ -291,15 +294,22 @@ public:
 
         // [Valid] Received data
         com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
-            "/buav_" + std::to_string(sUAV_id) + "/rx", 10, 
+            "/suav_" + std::to_string(sUAV_id) + "/rx", 10, 
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
-                printf("I heard msg with strength %lf\n", msg.rssi);
+                for (int i = 0; i < VESSEL_NUM; i++){
+                    if (msg.data[i * 4] != 0){
+                        int other_id = msg.data[i * 4];
+                        new_det(other_id, i);
+                        MyDataFun::set_value(vsl_det_pos[i], msg.data[i * 4 + 1], msg.data[i * 4 + 2], msg.data[i * 4 + 3]);
+                    }
+                }
+                // printf("I heard msg with strength %lf\n", msg.rssi);
             }
         );
 
         // [Valid] Published data
         com_pub = this->create_publisher<ros_ign_interfaces::msg::Dataframe>(
-            "/buav_" + std::to_string(sUAV_id) + "/tx", 10
+            "/suav_" + std::to_string(sUAV_id) + "/tx", 10
         );
 
         // [Valid] Commander 
@@ -425,6 +435,16 @@ private:
         a.x = R_e2b[0][0] * xx + R_e2b[0][1] * yy + R_e2b[0][2] * zz;
         a.y = R_e2b[1][0] * xx + R_e2b[1][1] * yy + R_e2b[1][2] * zz;
         a.z = R_e2b[2][0] * xx + R_e2b[2][1] * yy + R_e2b[2][2] * zz;
+    }
+
+    bool has_det(int id, int vsl_id){
+        return (det_res[id] >> vsl_id) & 1;
+    }
+
+    void new_det_res(int id, int vsl_id){
+        if (!has_det(id, vsl_id)){
+            det_res[id] += (1 << vsl_id);
+        }
     }
 
     template<typename T>
@@ -591,7 +611,7 @@ private:
         for (int i = 0; i < VESSEL_NUM; i++){
             bool tmp_flag = false;
             for (int j = 1; j <= UAV_NUM; j++){
-                if ((det_res[j] >> i) & 1){
+                if (has_det(j, i)){
                     tmp_flag = true;
                 }
             }
@@ -606,15 +626,16 @@ private:
                 bool other_flag = false;
                 for (int j = 1; j <= UAV_NUM; j++){
                     if (j == sUAV_id) continue;
-                    if ((det_res[j] >> i) & 1){
+                    if (has_det(j, i)){
                         printf("But UAV %d has got it!\n", j);
                         other_flag = true;
                     }
                 }
                 if (other_flag) continue;
-                if (!((det_res[sUAV_id] >> i) & 1)){
-                    det_res[sUAV_id] += 1 << i;
-                }
+                // if (!((det_res[sUAV_id] >> i) & 1)){
+                //     det_res[sUAV_id] += 1 << i;
+                // }
+                new_det_res(sUAV_id, i);
                 if ((map_res >> i) & 1){
                     printf("Already Mapped Vessel %c!\n", 'A' + i);
                     continue;
@@ -744,13 +765,27 @@ private:
         }
         printf("\nDetection Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
-            if (det_res[sUAV_id] >> i & 1) printf("%c", 'A' + i);
+            if (has_det(sUAV_id, i)) printf("%c", 'A' + i);
         }
         printf("\nMap Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
             if (map_res >> i & 1) printf("%c", 'A' + i);
         }
         printf("\n");
+
+        ros_ign_interfaces::msg::Dataframe com_pub_data;
+        com_pub_data.data.resize(28);
+        for (int i = 0; i < VESSEL_NUM; i++){
+            for (int j = 1; j <= UAV_NUM; j++){
+                if (has_det(j, i)){
+                    com_pub_data.data[i * 4] = j;
+                    com_pub_data.data[i * 4 + 1] = vsl_det_pos[i].x;
+                    com_pub_data.data[i * 4 + 2] = vsl_det_pos[i].y;
+                    com_pub_data.data[i * 4 + 3] = vsl_det_pos[i].z;
+                }
+            }
+        }
+        com_pub->publish(com_pub_data);
 
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
