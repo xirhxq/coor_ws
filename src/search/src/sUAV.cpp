@@ -319,16 +319,22 @@ public:
         loop = 1;
         double side_length = 3062.28;
         double search_single_width = side_length / 10, search_signle_depth = side_length;
-        double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
-        double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
+        // double search_forward_y = (std::abs (sUAV_id - 5.5) - 0.25) * search_single_width  * ((sUAV_id > 5) * 2 - 1);
+        // double search_backward_y = (std::abs (sUAV_id - 5.5) + 0.25) * search_single_width * ((sUAV_id > 5) * 2 - 1);
         double search_backward_x = -side_length / 2.0;
         double search_forward_x = search_backward_x + search_signle_depth;
         double search_height = 50;
+        // for (int i = 1; i <= loop; i++){
+        //     search_tra.push_back(MyDataFun::new_point(search_backward_x, search_forward_y, search_height));
+        //     search_tra.push_back(MyDataFun::new_point(search_forward_x, search_forward_y, search_height));
+        //     search_tra.push_back(MyDataFun::new_point(search_forward_x, search_backward_y, search_height));
+        //     search_tra.push_back(MyDataFun::new_point(search_backward_x, search_backward_y, search_height));
+        // }
+        double search_y = search_single_width * (sUAV_id - 5.5);
+        search_tra.push_back(MyDataFun::new_point(search_backward_x, search_y, search_height));
         for (int i = 1; i <= loop; i++){
-            search_tra.push_back(MyDataFun::new_point(search_backward_x, search_forward_y, search_height));
-            search_tra.push_back(MyDataFun::new_point(search_forward_x, search_forward_y, search_height));
-            search_tra.push_back(MyDataFun::new_point(search_forward_x, search_backward_y, search_height));
-            search_tra.push_back(MyDataFun::new_point(search_backward_x, search_backward_y, search_height));
+            search_tra.push_back(MyDataFun::new_point(search_forward_x, search_y, search_height));
+            search_tra.push_back(MyDataFun::new_point(search_backward_x, search_y, search_height));
         }
         map_res = 0;
 
@@ -537,8 +543,8 @@ private:
     }
 
     void StepTakeoff(){
-        UAV_Control_to_Point_earth(takeoff_point);
      	printf("Takeoff!!!\n");
+        UAV_Control_to_Point_earth(takeoff_point);
         if (is_near(takeoff_point, 1)){
             printf("Takeoff Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = PREPARE;
@@ -546,8 +552,8 @@ private:
     }
 
     void StepPrepare(){
-        UAV_Control_to_Point_earth(search_tra[0]);
      	printf("Prepare!!!\n");
+        UAV_Control_to_Point_earth(search_tra[0]);
         if (is_near(search_tra[0], 1)){
             printf("Prepare Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = SEARCH;
@@ -563,9 +569,12 @@ private:
 
     void StepSearch(){
      	printf("Search!!!\n");
+        printf("To Point %s\n", MyDataFun::output_str(search_tra[search_tra_finish]).c_str());
         // UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
-        double yaw_diff = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]) - UAV_Euler[2];
-        yaw_diff += std::sin((get_time_now() - search_time) / 5) * PI / 3;
+        double tra_yaw = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]);
+        double shaking_angle = std::sin((get_time_now() - search_time) / 8) * PI / 2;
+        double yaw_diff = tra_yaw + shaking_angle - UAV_Euler[2];
+        printf("Desired angle %.2lf while now %.2lf\n", tra_yaw + shaking_angle, UAV_Euler[2]);
         if (MyDataFun::dis_2d(search_tra[search_tra_finish], UAV_pos) <= 5) yaw_diff = 0;
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
         if (is_near(search_tra[search_tra_finish], 1)){
@@ -577,15 +586,28 @@ private:
                 task_state = BACK;
                 // StepMapInit();
             }
+        }    
+        bool finish_flag = true;
+        for (int i = 0; i < VESSEL_NUM; i++){
+            bool tmp_flag = false;
+            for (int j = 1; j <= UAV_NUM; j++){
+                if ((det_res[j] >> i) & 1){
+                    tmp_flag = true;
+                }
+            }
+            if (!tmp_flag) finish_flag = false;
+        }
+        if (finish_flag){
+            task_state = BACK;
         }
         for (int i = 0; i < VESSEL_NUM; i++){
             if (is_near_2d(vsl_pos[i], 3000) && det_cnt[i] >= 50){
-                printf("Got Vessel %c !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", 'A' + i);
+                printf("Got Vessel %c!\n", 'A' + i);
                 bool other_flag = false;
                 for (int j = 1; j <= UAV_NUM; j++){
                     if (j == sUAV_id) continue;
                     if ((det_res[j] >> i) & 1){
-                        printf("But UAV %d has got it!!!!!!\n", j);
+                        printf("But UAV %d has got it!\n", j);
                         other_flag = true;
                     }
                 }
@@ -594,7 +616,7 @@ private:
                     det_res[sUAV_id] += 1 << i;
                 }
                 if ((map_res >> i) & 1){
-                    printf("Already Mapped Vessel %c\n", 'A' + i);
+                    printf("Already Mapped Vessel %c!\n", 'A' + i);
                     continue;
                 }
                 vsl_id = i;
@@ -603,7 +625,6 @@ private:
                 StepMapInit();
             }
         }
-        
     }
 	
     void StepMapInit(){
@@ -620,7 +641,9 @@ private:
      	printf("MAP around Vessel %c!!!\n", 'A' + vsl_id);
 
         double now_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
+        printf("Initial theta: %.2lf\n", map_init_theta * RAD2DEG);
         printf("Now theta: %.2lf\n", now_theta * RAD2DEG);
+        printf("Half loop: %c\n", half_loop_flag?'Y':'N');
 
         if (abs(now_theta - map_init_theta + PI) <= 5 * DEG2RAD
         || abs(now_theta - map_init_theta + 3 * PI) <= 5 * DEG2RAD
@@ -705,10 +728,10 @@ private:
         update_time();
         std::cout << "\033c" << std::flush;
         printf("Time: %.2lf\n", task_time);
-        printf("sUAV #%d @ (%.2lf, %.2lf, %.2lf)\n", sUAV_id, UAV_pos.x, UAV_pos.y, UAV_pos.z);
+        printf("sUAV #%d @ %s\n", sUAV_id, MyDataFun::output_str(UAV_pos).c_str());
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
-        // printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
+        printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
         // for (int i = 0; i < VESSEL_NUM; i++){

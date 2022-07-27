@@ -51,7 +51,7 @@ print(real_l)
 data = data.loc[(data[real_l]!=0).all(axis=1), :]
 print(data)
 
-skip_num = 20
+skip_num = 150
 
 total_length = int(len(data[target[0] + 'uav_1_x']) / skip_num)
 
