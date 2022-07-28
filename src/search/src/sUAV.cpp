@@ -13,6 +13,7 @@
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/fluid_pressure.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
 typedef geometry_msgs::msg::Point Point;
@@ -20,6 +21,9 @@ typedef geometry_msgs::msg::Point Point;
 #include "std_msgs/msg/int16.hpp"
 #include "target_bbox_msgs/msg/bounding_boxes.hpp"
 #include "ros_ign_interfaces/msg/dataframe.hpp"
+#include "ros_ign_interfaces/msg/string_vec.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 
 #include "MyMathFun.h"
@@ -63,6 +67,18 @@ public:
     
     // Sim time clock
     double clock;
+
+    // Run clock
+    double run_clock;
+
+    // Score
+    double score;
+
+    // Competition phase
+    std::string phase;
+
+    // Detection status
+    std::string status;
 
     // [Invalid] Groundtruth position of sUAV itself
     Point UAV_pos;
@@ -325,14 +341,71 @@ public:
             "/suav_" + std::to_string(sUAV_id) + "/tx", 10
         );
 
-        // [Valid] Commander 
+        // [Invalid] Commander 
         cmd_sub = this->create_subscription<std_msgs::msg::Int16>(
             "/commander_cmd", 10, 
             [this](const std_msgs::msg::Int16 & msg){
                 this->cmd = msg.data;
             }
         );
+
+        // [Valid] Video report
+        report_stream_pub = this->create_publisher<sensor_msgs::msg::Image>(
+            "/suav_" + std::to_string(sUAV_id) + "/mbzirc/target/stream/start", 10
+        );
+
+        // [Valid] Target report
+        report_target_pub = this->create_publisher<ros_ign_interfaces::msg::StringVec>(
+            "/suav_" + std::to_string(sUAV_id) + "/mbzirc/target/stream/report", 10
+        );
+
+        // [Valid] Received status
+        report_status_sub = this->create_subscription<std_msgs::msg::String>(
+            "/mbzirc/target/stream/status", 10,
+            [this](const std_msgs::msg::String & msg){
+                this->status = msg.data;
+                if (msg.data == "vessel_id_success"){
+                    this->vsl_det_cmd_pub->publish(msg);
+                }
+            }
+        );
         
+        // [Valid] Run clock
+        run_clock_sub = this->create_subscription<rosgraph_msgs::msg::Clock>(
+            "/mbzirc/run_clock", 10,
+            [this](const rosgraph_msgs::msg::Clock & msg){
+                this->run_clock = double(msg.clock.sec) + double(msg.clock.nanosec) / 1e9;
+            }
+        );
+
+        // [Valid] Score
+        score_sub = this->create_subscription<std_msgs::msg::Float32>(
+            "/mbzirc/score", 10, 
+            [this](const std_msgs::msg::Float32 & msg){
+                this->score = msg.data;
+            }
+        );
+
+        // [Valid] Phase
+        phase_sub = this->create_subscription<std_msgs::msg::String>(
+            "/mbzirc/phase", 10,\
+            [this](const std_msgs::msg::String & msg){
+                this->phase = msg.data;
+            }
+        );
+
+        // [Valid] Camera image sub
+        camera_sub = this->create_subscription<sensor_msgs::msg::Image>(
+            "/suav_" + std::to_string(sUAV_id) + "/slot0/image_raw", 10,
+            [this](const sensor_msgs::msg::Image & msg){
+                this->report_stream_pub->publish(msg);
+            }
+        );
+
+        // [Valid] Command for vessel detection
+        vsl_det_cmd_pub = this->create_publisher<std_msgs::msg::String> (
+            "/suav_" + std::to_string(sUAV_id) + "/vessel_det_status", 10
+        );
 
         timer_ = this->create_wall_timer(50ms, std::bind(&sUAV::timer_callback, this));
         sat_vel.x = 5;
@@ -401,7 +474,13 @@ private:
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             det_cnt[vis_vsl_num]++;
             vsl_pos_stat[vis_vsl_num].new_data(MyDataFun::dis(real_vsl_pos[vis_vsl_num], vsl_pos[vis_vsl_num]));
-            
+            // if (vis_vsl_num == 1){
+            //     ros_ign_interfaces::msg::StringVec data;
+            //     data.data.push_back("vessel");
+            //     data.data.push_back(std::to_string(int(msg.bounding_boxes[i].x_center)));
+            //     data.data.push_back(std::to_string(int(msg.bounding_boxes[i].y_center)));
+            //     report_target_pub->publish(data);
+            // }
         }
 	}
 
@@ -563,6 +642,10 @@ private:
             det_box_sub = this->create_subscription<target_bbox_msgs::msg::BoundingBoxes>(
             "/suav_" + std::to_string(sUAV_id) + "/slot0/targets/bboxs", 10, std::bind(&sUAV::det_callback, this, _1));
             memset(det_cnt, 0, sizeof(det_cnt));
+
+            std_msgs::msg::String data;
+            data.data = "vessel_det";
+            vsl_det_cmd_pub->publish(data);
         }
     }
 
@@ -711,7 +794,8 @@ private:
     void timer_callback() {
         update_time();
         std::cout << "\033c" << std::flush;
-        printf("Time: %.2lf\n", task_time);
+        printf("Time: %.2lf(%.2lf)\n", task_time, run_clock);
+        printf("Phase: %s\nStatus: %s\nScore:%.2lf\n", phase.c_str(), status.c_str(), score);
         printf("sUAV #%d @ %s\n", sUAV_id, MyDataFun::output_str(UAV_pos).c_str());
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
@@ -821,7 +905,6 @@ private:
     }
 
     rclcpp::TimerBase::SharedPtr timer_;
-    rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub;
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, vsl_sub[VESSEL_NUM];
@@ -832,6 +915,18 @@ private:
     rclcpp::Subscription<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_sub;
     rclcpp::Publisher<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_pub;
     rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr cmd_sub;
+
+    rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
+    rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr run_clock_sub;
+    rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr score_sub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr phase_sub;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr report_stream_pub;
+    rclcpp::Publisher<ros_ign_interfaces::msg::StringVec>::SharedPtr report_target_pub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr report_status_sub;
+
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
+
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr vsl_det_cmd_pub;
 };
 
 
