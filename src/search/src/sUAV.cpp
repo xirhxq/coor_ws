@@ -33,6 +33,9 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
+#define DOUBLE_ENCODE_SIZE 4
+#define VSL_DET_ENCODE_SIZE (3 * DOUBLE_ENCODE_SIZE + 1)
+
 using namespace geometry_msgs::msg;
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -272,20 +275,20 @@ public:
         }
         
         // [Valid] Detecting Results of Others
-        for (int i = 1; i <= UAV_NUM; i++){
-            if (i == sUAV_id) {
-                det_pub = this->create_publisher<std_msgs::msg::Int16>(
-                    "/suav_" + std::to_string(sUAV_id) + "/det_res", 10
-                );
-                continue;
-            }
-            det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
-                "/suav_" + std::to_string(i) + "/det_res", 10,
-                [i, this](const std_msgs::msg::Int16 & msg) -> void{
-                    this->det_res[i] = msg.data;
-                }
-            );
-        }
+        // for (int i = 1; i <= UAV_NUM; i++){
+        //     if (i == sUAV_id) {
+        //         det_pub = this->create_publisher<std_msgs::msg::Int16>(
+        //             "/suav_" + std::to_string(sUAV_id) + "/det_res", 10
+        //         );
+        //         continue;
+        //     }
+        //     det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
+        //         "/suav_" + std::to_string(i) + "/det_res", 10,
+        //         [i, this](const std_msgs::msg::Int16 & msg) -> void{
+        //             this->det_res[i] = msg.data;
+        //         }
+        //     );
+        // }
 
 
         // [Valid] Publish Quadrotor Velocity Command
@@ -296,11 +299,21 @@ public:
         com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
             "/suav_" + std::to_string(sUAV_id) + "/rx", 10, 
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
+                assert(msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM);
+                // printf("msg time: %.2lf\n", msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9);
                 for (int i = 0; i < VESSEL_NUM; i++){
-                    if (msg.data[i * 4] != 0){
-                        int other_id = msg.data[i * 4];
-                        new_det(other_id, i);
-                        MyDataFun::set_value(vsl_det_pos[i], msg.data[i * 4 + 1], msg.data[i * 4 + 2], msg.data[i * 4 + 3]);
+                    if (msg.data[i * VSL_DET_ENCODE_SIZE] != 0 && msg.data[i * VSL_DET_ENCODE_SIZE] != sUAV_id){
+                        int other_id = msg.data[i * VSL_DET_ENCODE_SIZE];
+                        new_det_res(other_id, i);
+                        double tmp[3];
+                        for (int j = 0; j < 3; j++){
+                            tmp[j] = 1.0 * double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2] << 16) 
+                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 3] << 8) 
+                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 4]);
+                            tmp[j] /= 100.0;
+                            if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
+                        }
+                        MyDataFun::set_value(vsl_det_pos[i], tmp);
                     }
                 }
                 // printf("I heard msg with strength %lf\n", msg.rssi);
@@ -455,13 +468,13 @@ private:
         cmd.linear.x *= X_KP;
         cmd.linear.y *= Y_KP;
         cmd.linear.z *= Z_KP;
-        printf("UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
-        printf("Saturated UAV vel cmd in earth frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Sat vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         e2b(cmd.linear);
-        printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Sat vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_yaw_rate(cmd.angular.z);
-        printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
+        printf("Sat yaw cmd (body): %.2lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
     }
 
@@ -478,7 +491,6 @@ private:
         geometry_msgs::msg::Twist cmd;
         cmd.angular.z = yaw_rate;
         MyDataFun::set_value(cmd.linear, ctrl_cmd);
-        printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
         vel_cmd_pub->publish(cmd);
     }
@@ -490,31 +502,10 @@ private:
         cmd.linear.z = z;
         UAV_Control_body(cmd.linear, yaw_rate);
     }
-
-    template<typename T>
-    void UAV_Control_circle_while_facing(T a){
-        printf("Control in circle while facing (%.2lf, %.2lf, %.2lf)\n", a.x, a.y, a.z);
-        geometry_msgs::msg::Twist cmd;
-        double dis2vsl = sqrt(pow(a.y - UAV_pos.y, 2) + pow(a.x - UAV_pos.x, 2));
-        printf("Distance 2 Vessel: %.2lf\n", dis2vsl);
-        cmd.linear.x = (dis2vsl - MAP_TRA_RADIUS) * X_KP;
-        cmd.linear.y = MAP_Y_VEL;
-        cmd.linear.z = (dis2vsl * tan(CAMERA_ANGLE * DEG2RAD) - UAV_pos.z) * Z_KP;
-        double des_yaw = MyDataFun::angle_2d(UAV_pos, a);
-        printf("Now yaw is %.2lf while desired yaw is %.2lf\n", UAV_Euler[2] * RAD2DEG, des_yaw * RAD2DEG);
-        cmd.angular.z = YAW_KP * (des_yaw - UAV_Euler[2]);
-        printf("UAV yaw cmd: %.2lf\n", cmd.angular.z);
-        printf("UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
-        saturate_vel(cmd.linear);
-        saturate_yaw_rate(cmd.angular.z);
-        printf("Saturated UAV vel cmd in body frame: %.6lf %.6lf %.6lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
-        printf("Saturated UAV yaw cmd in body frame: %.6lf\n", cmd.angular.z);
-        vel_cmd_pub->publish(cmd);
-    }
     
     template<typename T>
     void UAV_Control_to_Point_earth(T ctrl_cmd){
-        printf("Control to Point (%.2lf, %.2lf, %.2lf)\n", ctrl_cmd.x, ctrl_cmd.y, ctrl_cmd.z);
+        printf("To Point (%.2lf, %.2lf, %.2lf)\n", ctrl_cmd.x, ctrl_cmd.y, ctrl_cmd.z);
         double yaw_diff = MyDataFun::angle_2d(UAV_pos, ctrl_cmd) - UAV_Euler[2];
         if (MyDataFun::dis_2d(ctrl_cmd, UAV_pos) <= 5) yaw_diff = 0;
         UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
@@ -534,18 +525,8 @@ private:
         UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
     }
 
-    // template<typename T1, typename T2>
-    // void Relay_Common(){
-    //     ros_ign_interfaces::msg::Dataframe Data_Send;
-    //     ros_ign_interfaces::msg::Dataframe Data_Reciv;
-        
-    //     Data_send.src_address="/suav_" + std::to_string(sUAV_id)
-    //     Data_send.src_address="/suav_" + std::to_string(sUAV_id)
-    //     Data_send.data.push_back(233);
-    // }
-
     void StepInit(){
-        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf) !!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
+        printf("Takeoff Point @ (%.2lf, %.2lf, %.2lf)\n", takeoff_point.x, takeoff_point.y, takeoff_point.z);
         MyDataFun::set_value(birth_point, UAV_pos);
         MyDataFun::set_value(takeoff_point, UAV_pos);
         birth_point.z -= 10;
@@ -566,7 +547,6 @@ private:
      	printf("Takeoff!!!\n");
         UAV_Control_to_Point_earth(takeoff_point);
         if (is_near(takeoff_point, 1)){
-            printf("Takeoff Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = PREPARE;
         }
     }
@@ -575,7 +555,6 @@ private:
      	printf("Prepare!!!\n");
         UAV_Control_to_Point_earth(search_tra[0]);
         if (is_near(search_tra[0], 1)){
-            printf("Prepare Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = SEARCH;
             search_tra_finish = 0;
             search_time = get_time_now();
@@ -590,7 +569,6 @@ private:
     void StepSearch(){
      	printf("Search!!!\n");
         printf("To Point %s\n", MyDataFun::output_str(search_tra[search_tra_finish]).c_str());
-        // UAV_Control_to_Point_earth(search_tra[search_tra_finish]);
         double tra_yaw = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]);
         double shaking_angle = std::sin((get_time_now() - search_time) / 8) * PI / 2;
         double yaw_diff = tra_yaw + shaking_angle - UAV_Euler[2];
@@ -599,9 +577,7 @@ private:
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
         if (is_near(search_tra[search_tra_finish], 1)){
             search_tra_finish++;
-            printf("#%d Trajectory Point Arrived !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", search_tra_finish);
             if (search_tra_finish == int(search_tra.size())){
-                printf("Search Failed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
                 search_tra_finish = 0;
                 task_state = BACK;
                 // StepMapInit();
@@ -632,9 +608,6 @@ private:
                     }
                 }
                 if (other_flag) continue;
-                // if (!((det_res[sUAV_id] >> i) & 1)){
-                //     det_res[sUAV_id] += 1 << i;
-                // }
                 new_det_res(sUAV_id, i);
                 if ((map_res >> i) & 1){
                     printf("Already Mapped Vessel %c!\n", 'A' + i);
@@ -650,7 +623,6 @@ private:
 	
     void StepMapInit(){
         map_init_theta = MyDataFun::angle_2d(vsl_pos[vsl_id], UAV_pos);
-        printf("theta_init = %.2lf !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", map_init_theta * RAD2DEG);
         map_init_time = get_time_now();
         if (!((map_res >> vsl_id) & 1)) {
             map_res += (1 << vsl_id);
@@ -672,9 +644,6 @@ private:
             half_loop_flag = true;
         double map_theta = now_theta + 20 / MAP_TRA_RADIUS;
 
-        // double map_ang_vel = 1 / MAP_TRA_RADIUS;
-        // double map_time = get_time_now() - map_init_time;
-        // double map_theta = map_time * map_ang_vel + map_init_theta;
         Point map_point;
 
         double dis2vsl = sqrt(pow(vsl_pos[vsl_id].y - UAV_pos.y, 2) + pow(vsl_pos[vsl_id].x - UAV_pos.x, 2));
@@ -684,10 +653,6 @@ private:
         map_point.z = std::min(UAV_pos.z, dis2vsl * tan(CAMERA_ANGLE * DEG2RAD));
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
-        // UAV_Control_circle_while_facing(vsl_pos[vsl_id]);
-        // if (get_time_now() - map_init_time >= 150){
-        //     task_state = SEARCH;
-        // }
         if (abs(now_theta - map_init_theta) <= 5 * DEG2RAD && half_loop_flag){
             task_state = SEARCH;
             half_loop_flag = false;
@@ -702,7 +667,6 @@ private:
         printf("Holding: %.2lf!!!\n", task_time - hold_time);
         UAV_Control_earth(0, 0, 0, 0);
         if (task_time - hold_time >= hold_duration){
-            printf("Hold %.2lf seconds completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n", hold_duration);
             task_state = BACK;
         }
     }
@@ -711,7 +675,6 @@ private:
         UAV_Control_to_Point_earth(takeoff_point);
      	printf("Back!!!\n");
         if (is_near(takeoff_point, 1)){
-            printf("Back Completed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = LAND;
         }
     }
@@ -752,7 +715,7 @@ private:
         printf("sUAV #%d @ %s\n", sUAV_id, MyDataFun::output_str(UAV_pos).c_str());
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
-        printf("Euler angle: (Phi %.2lf, Theta %.2lf, Psi %.2lf)\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
+        printf("Phi %.2lf, Theta %.2lf, Psi %.2lf\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         // printf("Transform Matrix: ------\n");
         // for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) printf("%.2lf%c", R_e2b[i][j], (j==2)?'\n':'\t');
         // for (int i = 0; i < VESSEL_NUM; i++){
@@ -772,24 +735,50 @@ private:
             if (map_res >> i & 1) printf("%c", 'A' + i);
         }
         printf("\n");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            printf("%s / ", MyDataFun::output_str(vsl_det_pos[i]).c_str());
+        }printf("\n");
+        printf("det_res:");
+        for (int i = 1; i <= UAV_NUM; i++){
+            for (int j = 0; j < VESSEL_NUM; j++){
+                if (has_det(i, j)) printf("%c", 'A' + j);
+            }
+            printf(" / ");
+        }printf("\n");
 
         ros_ign_interfaces::msg::Dataframe com_pub_data;
-        com_pub_data.data.resize(28);
+        com_pub_data.data.resize(VESSEL_NUM * VSL_DET_ENCODE_SIZE);
         for (int i = 0; i < VESSEL_NUM; i++){
             for (int j = 1; j <= UAV_NUM; j++){
                 if (has_det(j, i)){
-                    com_pub_data.data[i * 4] = j;
-                    com_pub_data.data[i * 4 + 1] = vsl_det_pos[i].x;
-                    com_pub_data.data[i * 4 + 2] = vsl_det_pos[i].y;
-                    com_pub_data.data[i * 4 + 3] = vsl_det_pos[i].z;
+                    if (j == sUAV_id) {
+                        MyDataFun::set_value(vsl_det_pos[i], vsl_pos[i]);
+                    }
+                    com_pub_data.data[i * VSL_DET_ENCODE_SIZE] = j;
+                    double tmp[3] = {vsl_det_pos[i].x * 100, vsl_det_pos[i].y * 100, vsl_det_pos[i].z * 100};
+                    for (int k = 0; k < 3; k++){
+                        if (tmp[k] < 0) {
+                            com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 1;
+                            tmp[k] = -tmp[k];
+                        }
+                        else com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 0;
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = int(tmp[k]) >> 16;
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = (int(tmp[k]) >> 8) & ((1 << 8) - 1);
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = int(tmp[k]) & ((1 << 8) - 1); 
+                    }
                 }
             }
         }
-        com_pub->publish(com_pub_data);
+        com_pub_data.src_address = "suav_" + std::to_string(sUAV_id);
+        for (int i = 1; i <= UAV_NUM; i++){
+            if (i == sUAV_id) continue;
+            com_pub_data.dst_address = "suav_" + std::to_string(i);
+            com_pub->publish(com_pub_data);
+        }
 
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
-        det_pub->publish(tmp); 
+        // det_pub->publish(tmp); 
         switch (task_state){
             case INIT:{
                 StepInit();

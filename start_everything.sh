@@ -18,12 +18,12 @@ for i in "$@"; do
 	then
 		# echo "second row";
 		ii=`expr $i - 5`
-		wd_y=550
+		wd_y=600
 	else
 		# echo "first row";
 		ii=$i 
-		wd_y=30
+		wd_y=33
 	fi
-    wd_x=`expr $ii \* 335 - 260`
-	gnome-terminal --geometry=35x25+${wd_x}+${wd_y} --window -- bash -c "ros2 run search sUAV ${i}"
+    wd_x=`expr $ii \* 340 - 260`
+	gnome-terminal --geometry=36x28+${wd_x}+${wd_y} --window -- bash -c "ros2 run search sUAV ${i}"
 done
