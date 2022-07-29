@@ -37,6 +37,9 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
+#define TARGET_VESSEL 'b'
+#define COMM_RANGE 800
+
 #define DOUBLE_ENCODE_SIZE 4
 #define VSL_DET_ENCODE_SIZE (3 * DOUBLE_ENCODE_SIZE + 1)
 
@@ -52,6 +55,7 @@ typedef enum TASK_CODE{
     PREPARE,
     SEARCH,
     MAP,
+    BRIDGE,
     HOLD,
     BACK,
     LAND
@@ -208,6 +212,9 @@ public:
 
     // [StepMap] Half loop flag
     bool half_loop_flag;
+
+    // [StepBridge] Bridge point
+    Point bridge_point;
 
     sUAV(char *name) : Node("suav_" + std::string(name)) {
         sUAV_id = std::atoi(name);
@@ -394,14 +401,6 @@ public:
             }
         );
 
-        // [Valid] Camera image sub
-        camera_sub = this->create_subscription<sensor_msgs::msg::Image>(
-            "/suav_" + std::to_string(sUAV_id) + "/slot0/image_raw", 10,
-            [this](const sensor_msgs::msg::Image & msg){
-                this->report_stream_pub->publish(msg);
-            }
-        );
-
         // [Valid] Command for vessel detection
         vsl_det_cmd_pub = this->create_publisher<std_msgs::msg::String> (
             "/suav_" + std::to_string(sUAV_id) + "/vessel_det_status", 10
@@ -429,9 +428,12 @@ public:
         double search_y = search_single_width * (sUAV_id - 5.5);
         search_tra.push_back(MyDataFun::new_point(search_backward_x, search_y, search_height));
         for (int i = 1; i <= loop; i++){
-            search_tra.push_back(MyDataFun::new_point(search_forward_x, search_y, search_height));
-            search_tra.push_back(MyDataFun::new_point(search_backward_x, search_y, search_height));
+            MyDataFun::put_discrete_points(search_tra, MyDataFun::new_point(search_forward_x, search_y, search_height), 10);
+            // search_tra.push_back(MyDataFun::new_point(search_forward_x, search_y, search_height));
+            MyDataFun::put_discrete_points(search_tra, MyDataFun::new_point(search_backward_x, search_y, search_height), 10);
+            // search_tra.push_back(MyDataFun::new_point(search_backward_x, search_y, search_height));
         }
+        // MyDataFun::output_vector(search_tra);
         map_res = 0;
 
         for (int i = 0; i < VESSEL_NUM; i++){
@@ -537,6 +539,73 @@ private:
         if (!has_det(id, vsl_id)){
             det_res[id] += (1 << vsl_id);
         }
+    }
+
+    int tgt_vsl_det_id(){
+        int vsl_id = TARGET_VESSEL - 'a';
+        for (int i = 1; i <= UAV_NUM; i++){
+            if (has_det(i, vsl_id)) return i;
+        }
+        return 0;
+    }
+
+    template<typename T>
+    int bridge_num(T target_pos){
+        return std::ceil(MyDataFun::dis(target_pos, MyDataFun::new_point(-1500, 0, 0)) / COMM_RANGE) - 1;
+    }
+
+    bool if_i_am_bridge(int id){
+        int det_id = tgt_vsl_det_id();
+        if (det_id == 0) return false;
+        int bdg_num = bridge_num(vsl_det_pos[TARGET_VESSEL - 'a']);
+        if (bdg_num == 0) return false;
+        else if (bdg_num == 1){
+            if (det_id <= 5) return id == det_id + 1;
+            else return id == det_id - 1;
+        }
+        else if (bdg_num == 2){
+            if (det_id == 1) return id > det_id && id <= det_id + 2;
+            else if (det_id == 10) return id < det_id && id >= det_id - 2;
+            else return id == det_id - 1 || id == det_id + 1;
+        }
+        else if (bdg_num == 3){
+            if (det_id == 1) return id > det_id && id <= det_id + 3;
+            else if (det_id == 10) return id < det_id && id >= det_id - 3;
+            else if (det_id >= 2 && det_id <= 5) return id >= det_id - 1 && id <= det_id + 2 && id != det_id;
+            else return id <= det_id + 1 && id >= det_id - 2 && id != det_id;
+        }
+        else if (bdg_num == 4){
+            if (det_id <= 3) return id <= 5 && id != det_id;
+            else if (det_id >= 8) return id >= 6 && id != det_id;
+            else if (det_id >= 4 && det_id <= 5) return id >= 3 && id <= 7 && id != det_id;
+            else return id >= 4 && id <= 8 && id != det_id;
+        }
+        else {
+            printf("Invalid bridge num!\n");
+        }
+        return false;
+    }
+
+    int which_bridge(int id){
+        std::vector<int> bdg;
+        for (int i = 1; i <= UAV_NUM; i++){
+            if (if_i_am_bridge(i)){
+                bdg.push_back(i);
+            }
+        }
+        std::sort(bdg.begin(), bdg.end(), [](int a, int b){return abs(1.0 * a - 5.5) > abs(1.0 * b - 5.5);});
+        auto it = std::find(bdg.begin(), bdg.end(), id);
+        return std::distance(bdg.begin(), it) + 1;
+    }
+
+    template<typename T>
+    T bridge_pos(int id){
+        if (!if_i_am_bridge(id)) return MyDataFun::new_point(0, 0, 0);
+        Point distance = MyDataFun::minus(vsl_det_pos[TARGET_VESSEL - 'a'], MyDataFun::new_point(-1500, 0, 0));
+        distance =  MyDataFun::scale(distance, 1.0 * which_bridge(id) / (bridge_num(vsl_det_pos[TARGET_VESSEL - 'a']) + 1));
+        distance = MyDataFun::plus(distance, MyDataFun::new_point(-1500, 0, 0));
+        distance.z = 20;
+        return distance;
     }
 
     template<typename T>
@@ -651,7 +720,7 @@ private:
 
     void StepSearch(){
      	printf("Search!!!\n");
-        printf("To Point %s\n", MyDataFun::output_str(search_tra[search_tra_finish]).c_str());
+        printf("To Point %s(%d/%ld)\n", MyDataFun::output_str(search_tra[search_tra_finish]).c_str(), search_tra_finish, search_tra.size());
         double tra_yaw = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]);
         double shaking_angle = std::sin((get_time_now() - search_time) / 8) * PI / 2;
         double yaw_diff = tra_yaw + shaking_angle - UAV_Euler[2];
@@ -736,13 +805,26 @@ private:
         map_point.z = std::min(UAV_pos.z, dis2vsl * tan(CAMERA_ANGLE * DEG2RAD));
         printf("Next Point: (%.2lf, %.2lf, %.2lf)\n", map_point.x, map_point.y, map_point.z);
         UAV_Control_to_Point_with_facing(map_point, vsl_pos[vsl_id]);
-        if (abs(now_theta - map_init_theta) <= 5 * DEG2RAD && half_loop_flag){
+        // if (abs(now_theta - map_init_theta) <= 5 * DEG2RAD && half_loop_flag){
+        //     task_state = SEARCH;
+        //     half_loop_flag = false;
+        // }
+
+        if (cmd == 0){
             task_state = SEARCH;
-            half_loop_flag = false;
         }
         if (0){
             task_state = HOLD;
             hold_time = get_time_now();
+        }
+    }
+
+    void StepBridge(){
+        UAV_Control_to_Point_earth(bridge_point);
+        printf("Target Vessel @ %s\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str());
+        printf("Bridge @ %s (%d of %d)\n", MyDataFun::output_str(bridge_point).c_str(), which_bridge(sUAV_id), bridge_num(vsl_det_pos[TARGET_VESSEL - 'a']));
+        if (cmd == 0){
+            task_state = SEARCH;
         }
     }
     
@@ -795,8 +877,9 @@ private:
         update_time();
         std::cout << "\033c" << std::flush;
         printf("Time: %.2lf(%.2lf)\n", task_time, run_clock);
-        printf("Phase: %s\nStatus: %s\nScore:%.2lf\n", phase.c_str(), status.c_str(), score);
+        printf("Phase: %s\nStatus: %s\nScore: %.2lf\n", phase.c_str(), status.c_str(), score);
         printf("sUAV #%d @ %s\n", sUAV_id, MyDataFun::output_str(UAV_pos).c_str());
+        printf("Commander cmd: %d\n", cmd);
         // printf("Quaternion by imu: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_imu.w, UAV_att_imu.x, UAV_att_imu.y, UAV_att_imu.z);
         // printf("Quaternion by pos: (%.2lf, %.2lf, %.2lf, %.2lf)\n", UAV_att_pos.w, UAV_att_pos.x, UAV_att_pos.y, UAV_att_pos.z);
         printf("Phi %.2lf, Theta %.2lf, Psi %.2lf\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
@@ -863,6 +946,12 @@ private:
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
         // det_pub->publish(tmp); 
+
+        if (if_i_am_bridge(sUAV_id) && cmd != 0){
+            bridge_point = bridge_pos<Point>(sUAV_id);
+            task_state = BRIDGE;
+        }
+
         switch (task_state){
             case INIT:{
                 StepInit();
@@ -882,6 +971,10 @@ private:
             }
             case MAP:{
                 StepMap();
+                break;
+            }
+            case BRIDGE:{
+                StepBridge();
                 break;
             }
             case HOLD:{
@@ -923,8 +1016,6 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr report_stream_pub;
     rclcpp::Publisher<ros_ign_interfaces::msg::StringVec>::SharedPtr report_target_pub;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr report_status_sub;
-
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr camera_sub;
 
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr vsl_det_cmd_pub;
 };

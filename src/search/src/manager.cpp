@@ -180,7 +180,7 @@ public:
             if (real_suav_pos[i].z <= 1) continue;
             mp[l - 1 - f(real_suav_pos[i].x, l)][w - 1 - f(real_suav_pos[i].y, w)] = c;
         }
-        std::cout << "Now Map:" << std::endl;
+        // std::cout << "Now Map:" << std::endl;
         std::cout << "+";
         for (int j = 0; j < w; j++) std::cout << "-";
         std::cout << "+" << std::endl;

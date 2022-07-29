@@ -2,6 +2,7 @@
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include <cstring>
+#include <vector>
 
 typedef geometry_msgs::msg::Point Point;
 
@@ -88,6 +89,15 @@ namespace MyDataFun{
     }
 
     template<typename T>
+    T scale(T a, double b){
+        T res = a;
+        res.x *= b;
+        res.y *= b;
+        res.z *= b;
+        return res;
+    }
+
+    template<typename T>
     std::string output_str(T a){
         char s[50];
         sprintf(s, "(%.2lf, %.2lf, %.2lf)", a.x, a.y, a.z);
@@ -95,6 +105,21 @@ namespace MyDataFun{
         return res;
     }
 
+    template<typename T>
+    void put_discrete_points(std::vector<T> &v, T b, int n){
+        assert(!v.empty());
+        T a = v[v.size() - 1];
+        for (int i = 1; i <= n; i++){
+            v.push_back(plus(a, scale(minus(b, a), 1.0 * i / n)));
+        }
+    }
+
+    template<typename T>
+    void output_vector(std::vector<T> & v){
+        for (auto i: v){
+            printf("%s\n", output_str(i).c_str());
+        }
+    }
 }
 
     
