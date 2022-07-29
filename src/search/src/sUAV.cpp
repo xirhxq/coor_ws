@@ -309,9 +309,10 @@ public:
                         new_det_res(other_id, i);
                         double tmp[3];
                         for (int j = 0; j < 3; j++){
-                            tmp[j] = 1.0 * double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2] << 16) 
-                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 3] << 8) 
-                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 4]);
+                            tmp[j] = 1.0 * MyDataFun::decode_uint8(msg.data, i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2);
+                            // tmp[j] = 1.0 * double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2] << 16) 
+                            //         + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 3] << 8) 
+                            //         + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 4]);
                             tmp[j] /= 100.0;
                             if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
                         }
@@ -905,9 +906,12 @@ private:
                             tmp[k] = -tmp[k];
                         }
                         else com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 0;
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = int(tmp[k]) >> 16;
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = (int(tmp[k]) >> 8) & ((1 << 8) - 1);
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = int(tmp[k]) & ((1 << 8) - 1); 
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 2);
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 1);
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 0);
+                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = int(tmp[k]) >> 16;
+                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = (int(tmp[k]) >> 8) & ((1 << 8) - 1);
+                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = int(tmp[k]) & ((1 << 8) - 1); 
                     }
                 }
             }

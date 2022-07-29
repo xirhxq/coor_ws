@@ -120,6 +120,14 @@ namespace MyDataFun{
             printf("%s\n", output_str(i).c_str());
         }
     }
+
+    uint8_t encode_uint8(uint32_t x, int n){
+        return (x >> (8 * n)) & ((1 << 8) - 1);
+    }
+
+    uint32_t decode_uint8(std::vector<uint8_t> &v, int pos){
+        return v[pos] << 16 + v[pos + 1] << 8 + v[pos];
+    }
 }
 
     
