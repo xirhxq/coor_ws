@@ -374,7 +374,7 @@ public:
 
         // [Valid] Phase
         phase_sub = this->create_subscription<std_msgs::msg::String>(
-            "/mbzirc/phase", 10,\
+            "/mbzirc/phase", 10,
             [this](const std_msgs::msg::String & msg){
                 this->phase = msg.data;
             }
