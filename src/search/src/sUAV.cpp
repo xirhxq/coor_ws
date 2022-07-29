@@ -93,9 +93,6 @@ public:
     // [Invalid] Groundtruth attitude of sUAV itself
     Quaternion UAV_att_pos;
 
-    // [Invalid] Groundtruth velocity in world frame of sUAV itself
-    Point UAV_vel;
-
     // Air pressure height of sUAV itself
     double air_pressure;
 
@@ -229,8 +226,7 @@ public:
         
         name_vec = {"time", "day", "hour", "min", "sec", "control_state", 
                     "uav_pos_x", "uav_pos_y", "uav_pos_z",
-                    "uav_roll", "uav_pitch", "uav_yaw",
-                    "uav_vel_x", "uav_vel_y", "uav_vel_z"};
+                    "uav_roll", "uav_pitch", "uav_yaw"};
 
         for (int i = 0; i < VESSEL_NUM; i++){
             std::string s = "vessel_";
@@ -253,34 +249,34 @@ public:
 
         // [Valid] IMU Data: 1. Pose 2. Orientation
         imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(
-                "/suav_" + std::to_string(sUAV_id) + "/imu/data", 10,
-                [this](const sensor_msgs::msg::Imu & msg){
-                    MyDataFun::set_value_quaternion(this->UAV_att_imu, msg.orientation);
-                    double q[4];
-                    q[0] = msg.orientation.w;
-                    q[1] = msg.orientation.x;
-                    q[2] = msg.orientation.y;
-                    q[3] = msg.orientation.z;
-                    MyMathFun::quaternion_2_euler(q, this->UAV_Euler); 		// ENU
-                    MyMathFun::Euler_2_Dcm(this->UAV_Euler, this->R_e2b);		// Rotation Matrix: ENU to Body
-                }
+            "/suav_" + std::to_string(sUAV_id) + "/imu/data", 10,
+            [this](const sensor_msgs::msg::Imu & msg){
+                MyDataFun::set_value_quaternion(this->UAV_att_imu, msg.orientation);
+                double q[4];
+                q[0] = msg.orientation.w;
+                q[1] = msg.orientation.x;
+                q[2] = msg.orientation.y;
+                q[3] = msg.orientation.z;
+                MyMathFun::quaternion_2_euler(q, this->UAV_Euler); 		// ENU
+                MyMathFun::Euler_2_Dcm(this->UAV_Euler, this->R_e2b);		// Rotation Matrix: ENU to Body
+            }
         );
 
         // [Valid] Air Pressure Height
         alt_sub = this->create_subscription<sensor_msgs::msg::FluidPressure>(
-                "/suav_" + std::to_string(sUAV_id) + "/air_pressure", 10,
-                [this](const sensor_msgs::msg::FluidPressure & msg){
-                    this->air_pressure = msg.fluid_pressure;
-                }
+            "/suav_" + std::to_string(sUAV_id) + "/air_pressure", 10,
+            [this](const sensor_msgs::msg::FluidPressure & msg){
+                this->air_pressure = msg.fluid_pressure;
+            }
         );
 
         // [Invalid] Groundtruth Pose of Quadrotors
         nav_sub = this->create_subscription<geometry_msgs::msg::Pose>(
-                "/model/suav_" + std::to_string(sUAV_id) + "/world_pose", 10,
-                [this](const geometry_msgs::msg::Pose & msg){
-                    MyDataFun::set_value(this->UAV_pos, msg.position);
-                    MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
-                }
+            "/model/suav_" + std::to_string(sUAV_id) + "/world_pose", 10,
+            [this](const geometry_msgs::msg::Pose & msg){
+                MyDataFun::set_value(this->UAV_pos, msg.position);
+                MyDataFun::set_value_quaternion(this->UAV_att_pos, msg.orientation);
+            }
         );
 
         // [Invalid] Groundtruth Pose of Target Vessels
@@ -296,23 +292,6 @@ public:
                     "/model/Vessel_" + chara_str + "/world_pose", 10,
                     fnc(i));
         }
-        
-        // [Valid] Detecting Results of Others
-        // for (int i = 1; i <= UAV_NUM; i++){
-        //     if (i == sUAV_id) {
-        //         det_pub = this->create_publisher<std_msgs::msg::Int16>(
-        //             "/suav_" + std::to_string(sUAV_id) + "/det_res", 10
-        //         );
-        //         continue;
-        //     }
-        //     det_sub[i] = this->create_subscription<std_msgs::msg::Int16>(
-        //         "/suav_" + std::to_string(i) + "/det_res", 10,
-        //         [i, this](const std_msgs::msg::Int16 & msg) -> void{
-        //             this->det_res[i] = msg.data;
-        //         }
-        //     );
-        // }
-
 
         // [Valid] Publish Quadrotor Velocity Command
         vel_cmd_pub = this->create_publisher<geometry_msgs::msg::Twist>(
@@ -863,10 +842,7 @@ private:
                  << UAV_pos.z << "\t"
                  << UAV_Euler[0] << "\t"
                  << UAV_Euler[1] << "\t"
-                 << UAV_Euler[2] << "\t"
-                 << UAV_vel.x << "\t"
-                 << UAV_vel.y << "\t"
-                 << UAV_vel.z << "\t";
+                 << UAV_Euler[2] << "\t";
         for (int i = 0; i < VESSEL_NUM; i++){
             log_file << MyDataFun::dis(real_vsl_pos[i], vsl_pos[i]) << "\t";
         }
@@ -903,14 +879,14 @@ private:
         }
         printf("\n");
         for (int i = 0; i < VESSEL_NUM; i++){
-            printf("%s / ", MyDataFun::output_str(vsl_det_pos[i]).c_str());
+            printf("%s/", MyDataFun::output_str(vsl_det_pos[i]).c_str());
         }printf("\n");
         printf("det_res:");
         for (int i = 1; i <= UAV_NUM; i++){
             for (int j = 0; j < VESSEL_NUM; j++){
                 if (has_det(i, j)) printf("%c", 'A' + j);
             }
-            printf(" / ");
+            printf("/");
         }printf("\n");
 
         ros_ign_interfaces::msg::Dataframe com_pub_data;
@@ -1004,8 +980,6 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr alt_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr nav_sub, vsl_sub[VESSEL_NUM];
     rclcpp::Subscription<target_bbox_msgs::msg::BoundingBoxes>::SharedPtr det_box_sub;
-    rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr det_sub[UAV_NUM + 1];
-    rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr det_pub;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_cmd_pub;
     rclcpp::Subscription<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_sub;
     rclcpp::Publisher<ros_ign_interfaces::msg::Dataframe>::SharedPtr com_pub;

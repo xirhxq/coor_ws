@@ -20,7 +20,7 @@ scale = 'whole' # 'whole' or 'tight'
 total_num = 10 if target == 'search' else 6
 
 tic = time.time()
-ptn = re.compile('.*14-31_Manager.txt')
+ptn = re.compile('.*_Manager.txt')
 src = 'src/' + target + '/data/'
 
 txt_files = []
