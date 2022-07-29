@@ -37,7 +37,7 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'b'
+#define TARGET_VESSEL 'c'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -604,7 +604,7 @@ private:
         Point distance = MyDataFun::minus(vsl_det_pos[TARGET_VESSEL - 'a'], MyDataFun::new_point(-1500, 0, 0));
         distance =  MyDataFun::scale(distance, 1.0 * which_bridge(id) / (bridge_num(vsl_det_pos[TARGET_VESSEL - 'a']) + 1));
         distance = MyDataFun::plus(distance, MyDataFun::new_point(-1500, 0, 0));
-        distance.z = 20;
+        distance.z = 10 + 2 * sUAV_id;
         return distance;
     }
 
@@ -942,6 +942,8 @@ private:
             com_pub_data.dst_address = "suav_" + std::to_string(i);
             com_pub->publish(com_pub_data);
         }
+        com_pub_data.dst_address = "usv";
+        com_pub->publish(com_pub_data);
 
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
