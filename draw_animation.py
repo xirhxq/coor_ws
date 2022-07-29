@@ -49,6 +49,7 @@ real_l = [i for i in l if data[i].any(axis=0)]
 print(real_l)
 
 data = data.loc[(data[real_l]!=0).all(axis=1), :]
+data = data.reset_index(drop=True)
 print(data)
 
 skip_num = 150
@@ -99,6 +100,10 @@ ax.view_init(30, -60)
 plt.gca().set_box_aspect((max_x - min_x, max_y - min_y,  2 * (max_z - min_z)))
 plt.title(target[0] + 'UAV Trajectory')
 
+pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][0] for j in range(0, 3)] for i in range(1, 11)]
+pos_marker, = ax.plot([pos_list[i][0] for i in range(10)], [pos_list[i][1] for i in range(10)], [pos_list[i][2] for i in range(10)], 'b*')
+
+
 def update(num):
     progress_percentage = num / total_length * 100
     elap_time = time.time() - tic
@@ -118,8 +123,12 @@ def update(num):
         vsl_name = 'vessel_' + chr(ord('a') + i)
         l_vessel[i].set_data(data[vsl_name + '_x'][0:skip_num * num + 1: skip_num].values.tolist(),
                              data[vsl_name + '_y'][0:skip_num * num + 1: skip_num].values.tolist())
-        l_vessel[i].set_3d_properties(data[vsl_name + '_z'][0:skip_num * num + 1: skip_num].values.tolist())
-    return l, l_vessel
+        l_vessel[i].set_3d_properties(data[vsl_name + '_z'][0:skip_num * num + 1: skip_num].values.tolist())    
+    pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][skip_num * num + 1] for j in range(0, 3)] for i in range(1, 11)]
+    pos_marker.set_data([pos_list[i][0] for i in range(10)], [pos_list[i][1] for i in range(10)])
+    pos_marker.set_3d_properties([pos_list[i][2] for i in range(10)])
+    # assert 0
+    return l, l_vessel, pos_marker
 
 
 ani = animation.FuncAnimation(fig, update, total_length, interval=skip_num, blit=False)
