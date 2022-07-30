@@ -126,7 +126,7 @@ namespace MyDataFun{
     }
 
     uint32_t decode_uint8(std::vector<uint8_t> &v, int pos){
-        return v[pos] << 16 + v[pos + 1] << 8 + v[pos];
+        return (v[pos] << 16) + (v[pos + 1] << 8) + v[pos + 2];
     }
 }
 

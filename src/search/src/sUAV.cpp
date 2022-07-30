@@ -37,7 +37,7 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'c'
+#define TARGET_VESSEL 'b'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -301,7 +301,8 @@ public:
         com_sub = this->create_subscription<ros_ign_interfaces::msg::Dataframe>(
             "/suav_" + std::to_string(sUAV_id) + "/rx", 10, 
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
-                assert(msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM);
+                // assert(msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM);
+                if (msg.data.size() != VSL_DET_ENCODE_SIZE * VESSEL_NUM) return;
                 // printf("msg time: %.2lf\n", msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9);
                 for (int i = 0; i < VESSEL_NUM; i++){
                     if (msg.data[i * VSL_DET_ENCODE_SIZE] != 0 && msg.data[i * VSL_DET_ENCODE_SIZE] != sUAV_id){
@@ -309,10 +310,10 @@ public:
                         new_det_res(other_id, i);
                         double tmp[3];
                         for (int j = 0; j < 3; j++){
-                            tmp[j] = 1.0 * MyDataFun::decode_uint8(msg.data, i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2);
-                            // tmp[j] = 1.0 * double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2] << 16) 
-                            //         + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 3] << 8) 
-                            //         + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 4]);
+                            // tmp[j] = 1.0 * MyDataFun::decode_uint8(msg.data, i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2);
+                            tmp[j] = 1.0 * double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 2] << 16) 
+                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 3] << 8) 
+                                    + double(msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 4]);
                             tmp[j] /= 100.0;
                             if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
                         }
@@ -578,6 +579,20 @@ private:
         return std::distance(bdg.begin(), it) + 1;
     }
 
+    int bridge_at(int pos){
+        std::vector<int> bdg;
+        for (int i = 1; i <= UAV_NUM; i++){
+            if (if_i_am_bridge(i)){
+                bdg.push_back(i);
+            }
+        }
+        std::sort(bdg.begin(), bdg.end(), [](int a, int b){return abs(1.0 * a - 5.5) > abs(1.0 * b - 5.5);});
+        if (pos < 0) pos = bdg.size() + pos;
+        else pos--;
+        if (pos < 0 || pos >= bdg.size()) return -1;
+        return bdg[pos];
+    }
+
     template<typename T>
     T bridge_pos(int id){
         if (!if_i_am_bridge(id)) return MyDataFun::new_point(0, 0, 0);
@@ -790,6 +805,14 @@ private:
         //     half_loop_flag = false;
         // }
 
+
+        std_msgs::msg::String data;
+        int nxt = bridge_at(-1);
+        if (nxt == -1) data.data = "vessel_det_one";
+        data.data = "vessel_det_source_" + std::to_string(nxt);
+        vsl_det_cmd_pub->publish(data);
+        printf("Comm to %d (%s)\n", nxt, data.data.c_str());
+
         if (cmd == 0){
             task_state = SEARCH;
         }
@@ -803,6 +826,16 @@ private:
         UAV_Control_to_Point_earth(bridge_point);
         printf("Target Vessel @ %s\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str());
         printf("Bridge @ %s (%d of %d)\n", MyDataFun::output_str(bridge_point).c_str(), which_bridge(sUAV_id), bridge_num(vsl_det_pos[TARGET_VESSEL - 'a']));
+
+        std_msgs::msg::String data;
+        int nxt = bridge_at(which_bridge(sUAV_id) - 1);
+        if (nxt == -1) data.data = "vessel_det_upload";
+        else data.data = "vessel_det_bridge_" + std::to_string(nxt);
+        vsl_det_cmd_pub->publish(data);
+
+        printf("Comm to %d(%s)\n", nxt, data.data.c_str());
+
+        
         if (cmd == 0){
             task_state = SEARCH;
         }
