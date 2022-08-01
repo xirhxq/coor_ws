@@ -213,6 +213,11 @@ public:
     // [StepBridge] Bridge point
     Point bridge_point;
 
+    //
+    // double shaking_angle = PI / 3;
+    // int shaking_label = 1 ;
+    // double shaking_diff = 0
+
     sUAV(char *name) : Node("suav_" + std::string(name)) {
         sUAV_id = std::atoi(name);
 
@@ -719,7 +724,10 @@ private:
         double tra_yaw = MyDataFun::angle_2d(UAV_pos, search_tra[search_tra_finish]);
         double shaking_angle = std::sin((get_time_now() - search_time) / 8) * PI / 2;
         double yaw_diff = tra_yaw + shaking_angle - UAV_Euler[2];
-        printf("Desired angle %.2lf while now %.2lf\n", tra_yaw + shaking_angle, UAV_Euler[2]);
+        // if (abs(tra_yaw + shaking_angle - UAV_Euler[2])< 5 * DEG2RAD){shaking_label = shaking_label * -1;}
+        // shaking_diff = shaking_diff + shaking_label * 0.1;
+        // double yaw_diff = tra_yaw + shaking_angle - UAV_Euler[2];
+        printf("Desired angle %.2lf while now %.2lf\n", (tra_yaw + shaking_angle) * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         if (MyDataFun::dis_2d(search_tra[search_tra_finish], UAV_pos) <= 5) yaw_diff = 0;
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
         if (is_near(search_tra[search_tra_finish], 1)){
@@ -789,7 +797,7 @@ private:
         || abs(now_theta - map_init_theta + 3 * PI) <= 5 * DEG2RAD
         || abs(now_theta - map_init_theta - PI) <= 5 * DEG2RAD)
             half_loop_flag = true;
-        double map_theta = now_theta + 20 / MAP_TRA_RADIUS;
+        double map_theta = now_theta + 0 / MAP_TRA_RADIUS;
 
         Point map_point;
 
@@ -809,7 +817,7 @@ private:
         std_msgs::msg::String data;
         int nxt = bridge_at(-1);
         if (nxt == -1) data.data = "vessel_det_one";
-        data.data = "vessel_det_source_" + std::to_string(nxt);
+        else data.data = "vessel_det_source_" + std::to_string(nxt);
         vsl_det_cmd_pub->publish(data);
         printf("Comm to %d (%s)\n", nxt, data.data.c_str());
 
