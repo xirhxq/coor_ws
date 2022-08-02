@@ -37,7 +37,7 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'd'
+#define TARGET_VESSEL 'b'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
