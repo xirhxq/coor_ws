@@ -977,13 +977,14 @@ private:
         tmp.data = det_res[sUAV_id];
         // det_pub->publish(tmp); 
 
-        if (if_i_am_bridge(sUAV_id) && cmd != 0 &&){
-            bridge_point = bridge_pos<Point>(sUAV_id);
-            task_state = BRIDGE;
-        }
-
-        if (status.find("vessel_id_success") != std::string::npos && task_state < BACK){
-            task_state = BACK;
+        if (task_state < BACK){
+            if (if_i_am_bridge(sUAV_id) && cmd != 0){
+                bridge_point = bridge_pos<Point>(sUAV_id);
+                task_state = BRIDGE;
+            }
+            if (status.find("vessel_id_success") != std::string::npos){
+                task_state = BACK;
+            }
         }
 
         switch (task_state){
