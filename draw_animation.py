@@ -101,8 +101,11 @@ plt.gca().set_box_aspect((max_x - min_x, max_y - min_y,  2 * (max_z - min_z)))
 plt.title(target[0] + 'UAV Trajectory')
 
 pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][0] for j in range(0, 3)] for i in range(1, 11)]
-pos_marker, = ax.plot([pos_list[i][0] for i in range(10)], [pos_list[i][1] for i in range(10)], [pos_list[i][2] for i in range(10)], 'b*')
+pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, 10) if any(pos_list[i])]
+pos_marker, = ax.plot([i[0] for i in pos_list], [i[1] for i in pos_list], [i[2] for i in pos_list], 'b*')
 
+if 'run_time' in data:
+    txt = fig.text(0.05, 0.8, '', transform=ax.transAxes)
 
 def update(num):
     progress_percentage = num / total_length * 100
@@ -124,11 +127,16 @@ def update(num):
         l_vessel[i].set_data(data[vsl_name + '_x'][0:skip_num * num + 1: skip_num].values.tolist(),
                              data[vsl_name + '_y'][0:skip_num * num + 1: skip_num].values.tolist())
         l_vessel[i].set_3d_properties(data[vsl_name + '_z'][0:skip_num * num + 1: skip_num].values.tolist())    
-    pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][skip_num * num + 1] for j in range(0, 3)] for i in range(1, 11)]
-    pos_marker.set_data([pos_list[i][0] for i in range(10)], [pos_list[i][1] for i in range(10)])
-    pos_marker.set_3d_properties([pos_list[i][2] for i in range(10)])
+    pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][skip_num * num] for j in range(0, 3)] for i in range(1, 11)]
+    pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, 10) if any(pos_list[i])]
+    pos_marker.set_data([i[0] for i in pos_list], [i[1] for i in pos_list])
+    pos_marker.set_3d_properties([i[2] for i in pos_list])
+    if 'run_time' in data:
+        txt.set_text('Time = {:.2f}s\nScore: {:.2f}\nPhase: {}\nStatus: {}'.format(data['time'][skip_num * num], data['score'][skip_num * num], data['phase'][skip_num * num], data['status'][skip_num * num]))
+        return l, l_vessel, pos_marker, txt
+    else:
+        return l, l_vessel, pos_marker
     # assert 0
-    return l, l_vessel, pos_marker
 
 
 ani = animation.FuncAnimation(fig, update, total_length, interval=skip_num, blit=False)

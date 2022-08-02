@@ -37,7 +37,7 @@ typedef geometry_msgs::msg::Point Point;
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'b'
+#define TARGET_VESSEL 'd'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -81,7 +81,7 @@ public:
     // Competition phase
     std::string phase;
 
-    // Detection status
+    // Detection status feedback
     std::string status;
 
     // [Invalid] Groundtruth position of sUAV itself
@@ -212,6 +212,9 @@ public:
 
     // [StepBridge] Bridge point
     Point bridge_point;
+
+    // Last communication time in simulation
+    double last_comm_time;
 
     //
     // double shaking_angle = PI / 3;
@@ -357,7 +360,7 @@ public:
             "/mbzirc/target/stream/status", 10,
             [this](const std_msgs::msg::String & msg){
                 this->status = msg.data;
-                if (msg.data == "vessel_id_success"){
+                if (msg.data.find("vessel_id_success") != std::string::npos){
                     this->vsl_det_cmd_pub->publish(msg);
                 }
             }
@@ -594,7 +597,7 @@ private:
         std::sort(bdg.begin(), bdg.end(), [](int a, int b){return abs(1.0 * a - 5.5) > abs(1.0 * b - 5.5);});
         if (pos < 0) pos = bdg.size() + pos;
         else pos--;
-        if (pos < 0 || pos >= bdg.size()) return -1;
+        if (pos < 0 || size_t(pos) >= bdg.size()) return -1;
         return bdg[pos];
     }
 
@@ -931,48 +934,56 @@ private:
             printf("/");
         }printf("\n");
 
-        ros_ign_interfaces::msg::Dataframe com_pub_data;
-        com_pub_data.data.resize(VESSEL_NUM * VSL_DET_ENCODE_SIZE);
-        for (int i = 0; i < VESSEL_NUM; i++){
-            for (int j = 1; j <= UAV_NUM; j++){
-                if (has_det(j, i)){
-                    if (j == sUAV_id) {
-                        MyDataFun::set_value(vsl_det_pos[i], vsl_pos[i]);
-                    }
-                    com_pub_data.data[i * VSL_DET_ENCODE_SIZE] = j;
-                    double tmp[3] = {vsl_det_pos[i].x * 100, vsl_det_pos[i].y * 100, vsl_det_pos[i].z * 100};
-                    for (int k = 0; k < 3; k++){
-                        if (tmp[k] < 0) {
-                            com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 1;
-                            tmp[k] = -tmp[k];
+        if (get_time_now() > last_comm_time + 0.5) {
+            last_comm_time = get_time_now();
+            ros_ign_interfaces::msg::Dataframe com_pub_data;
+            com_pub_data.data.resize(VESSEL_NUM * VSL_DET_ENCODE_SIZE);
+            for (int i = 0; i < VESSEL_NUM; i++){
+                for (int j = 1; j <= UAV_NUM; j++){
+                    if (has_det(j, i)){
+                        if (j == sUAV_id) {
+                            MyDataFun::set_value(vsl_det_pos[i], vsl_pos[i]);
                         }
-                        else com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 0;
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 2);
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 1);
-                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 0);
-                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = int(tmp[k]) >> 16;
-                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = (int(tmp[k]) >> 8) & ((1 << 8) - 1);
-                        // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = int(tmp[k]) & ((1 << 8) - 1); 
+                        com_pub_data.data[i * VSL_DET_ENCODE_SIZE] = j;
+                        double tmp[3] = {vsl_det_pos[i].x * 100, vsl_det_pos[i].y * 100, vsl_det_pos[i].z * 100};
+                        for (int k = 0; k < 3; k++){
+                            if (tmp[k] < 0) {
+                                com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 1;
+                                tmp[k] = -tmp[k];
+                            }
+                            else com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 0;
+                            com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 2);
+                            com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 1);
+                            com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 0);
+                            // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 2] = int(tmp[k]) >> 16;
+                            // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 3] = (int(tmp[k]) >> 8) & ((1 << 8) - 1);
+                            // com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 4] = int(tmp[k]) & ((1 << 8) - 1); 
+                        }
                     }
                 }
             }
-        }
-        com_pub_data.src_address = "suav_" + std::to_string(sUAV_id);
-        for (int i = 1; i <= UAV_NUM; i++){
-            if (i == sUAV_id) continue;
-            com_pub_data.dst_address = "suav_" + std::to_string(i);
+            com_pub_data.src_address = "suav_" + std::to_string(sUAV_id);
+            for (int i = 1; i <= UAV_NUM; i++){
+                if (i == sUAV_id) continue;
+                com_pub_data.dst_address = "suav_" + std::to_string(i);
+                com_pub->publish(com_pub_data);
+            }
+            com_pub_data.dst_address = "usv";
             com_pub->publish(com_pub_data);
+
         }
-        com_pub_data.dst_address = "usv";
-        com_pub->publish(com_pub_data);
 
         std_msgs::msg::Int16 tmp;
         tmp.data = det_res[sUAV_id];
         // det_pub->publish(tmp); 
 
-        if (if_i_am_bridge(sUAV_id) && cmd != 0){
+        if (if_i_am_bridge(sUAV_id) && cmd != 0 &&){
             bridge_point = bridge_pos<Point>(sUAV_id);
             task_state = BRIDGE;
+        }
+
+        if (status.find("vessel_id_success") != std::string::npos && task_state < BACK){
+            task_state = BACK;
         }
 
         switch (task_state){

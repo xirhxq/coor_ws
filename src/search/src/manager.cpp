@@ -13,6 +13,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/float32.hpp"
 
 #define sUAV_NUM 10
 #define VESSEL_NUM 7
@@ -33,6 +35,15 @@ public:
 
     // Sim time clock
     double clock; 
+
+    // Detection status feedback
+    std::string status;
+
+    // Score
+    double score;
+
+    // Competition phase
+    std::string phase;
 
     // [Invalid] Groundtruth position of sUAV itself
     Point real_suav_pos[sUAV_NUM + 1];
@@ -55,7 +66,7 @@ public:
         log_file.open(iden_path, std::ios::out);
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
         
-        name_vec = {"time", "day", "hour", "min", "sec"};
+        name_vec = {"time", "day", "hour", "min", "sec", "run_time", "phase", "status", "score"};
         for (int i = 0; i < VESSEL_NUM; i++){
             for (int j = 0; j < 3; j++){
                 // "vessel_('a' + i)_('x' + j)"
@@ -110,6 +121,30 @@ public:
                     }
             );
         }
+
+        // [Valid] Score
+        score_sub = this->create_subscription<std_msgs::msg::Float32>(
+            "/mbzirc/score", 10, 
+            [this](const std_msgs::msg::Float32 & msg){
+                this->score = msg.data;
+            }
+        );
+
+        // [Valid] Phase
+        phase_sub = this->create_subscription<std_msgs::msg::String>(
+            "/mbzirc/phase", 10,
+            [this](const std_msgs::msg::String & msg){
+                this->phase = msg.data;
+            }
+        );
+
+        // [Valid] Received status
+        report_status_sub = this->create_subscription<std_msgs::msg::String>(
+            "/mbzirc/target/stream/status", 10,
+            [this](const std_msgs::msg::String & msg){
+                this->status = msg.data;
+            }
+        );
         
         timer_ = this->create_wall_timer(50ms, std::bind(&Manager::timer_callback, this));
 
@@ -133,6 +168,10 @@ public:
                  << t->tm_hour << "\t"
                  << t->tm_min << "\t"
                  << t->tm_sec << "\t";
+        log_file << clock << "\t"
+                 << phase << "\t"
+                 << status << "\t"
+                 << score << "\t";
         for (int i = 0; i < VESSEL_NUM; i++){
             log_file << real_vsl_pos[i].x << "\t"
                      << real_vsl_pos[i].y << "\t"
@@ -207,6 +246,9 @@ private:
     rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub;
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr suav_sub[sUAV_NUM + 1];
     rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr vsl_sub[VESSEL_NUM];
+    rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr score_sub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr phase_sub;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr report_status_sub;
 };
 
 
