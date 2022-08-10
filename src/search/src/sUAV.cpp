@@ -3,7 +3,7 @@
 #include "MyMathFun.h"
 #include "MyDataFun.h"
 
-#define UAV_NUM 14
+#define sUAV_NUM 14
 #define VESSEL_NUM 7
 #define KP 0.2
 #define X_KP KP
@@ -11,7 +11,7 @@
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'b'
+#define TARGET_VESSEL 'e'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -29,7 +29,7 @@ typedef enum TASK_CODE{
     PREPARE,
     STRETCH,
     SEARCH,
-    MAP,
+    PURSUE,
     BRIDGE,
     HOLD,
     BACK,
@@ -107,6 +107,9 @@ public:
     // Position of USV
     Point USV_pos;
 
+    // Velocity norm saturation of UAV control
+    double sat_norm;
+
     // Velocity saturation of UAV control 
     Point sat_vel;
 
@@ -144,10 +147,10 @@ public:
     int search_tra_finish;
 
     // [StepSearch] Search progress of other UAVs
-    int search_progress[UAV_NUM + 1];
+    int search_progress[sUAV_NUM + 1];
 
     // [StepSearch] Detecing Results of Other UAVs
-    int det_res[UAV_NUM + 1];
+    int det_res[sUAV_NUM + 1];
 
     // [StepSearch] Detection success counter
     int det_cnt[VESSEL_NUM];
@@ -284,8 +287,8 @@ public:
                         }
                     }
                 }
-                else if (msg.data.size() == UAV_NUM + 1){
-                    for (int i = 1; i <= UAV_NUM; i++){
+                else if (msg.data.size() == sUAV_NUM + 1){
+                    for (int i = 1; i <= sUAV_NUM; i++){
                         if (i == sUAV_id) continue;
                         if (msg.data[i] > search_progress[i] || search_progress[i] == 255){
                             search_progress[i] = msg.data[i];
@@ -362,6 +365,7 @@ public:
         sat_vel.x = 5;
         sat_vel.y = 5;
         sat_vel.z = 5;
+        sat_norm = 10;
         sat_yaw_rate = 90 * DEG2RAD;
         loop = 1;
         // double side_length = 3062.28;
@@ -387,9 +391,9 @@ public:
         // }
         // MyDataFun::output_vector(search_tra);
 
-        prepare_point = scissor_point(85 * DEG2RAD, 50, 100);
+        prepare_point = scissor_point(85 * DEG2RAD, 50, 30 + 2 * scissor_part_id(sUAV_id));
         for (int i = 85; i >= 10; i -= 1){
-            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 50));
+            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 30 + 2 * scissor_part_id(sUAV_id)));
         }
 
 
@@ -400,7 +404,7 @@ public:
             MyDataFun::set_value(vsl_pos[i], far_away);
         }
         
-        for (int i = 1; i <= UAV_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             det_res[i] = 0;
         }
 
@@ -471,6 +475,13 @@ private:
     }
 
     template<typename T>
+    void saturate_length(T &a){
+        double norm = MyDataFun::norm(a);
+        if (norm < sat_norm) return;
+        a = MyDataFun::scale(a, sat_norm / norm);
+    }
+
+    template<typename T>
     void saturate_vel(T &a){
         a.x = MyMathFun::LimitValue(a.x, sat_vel.x);
         a.y = MyMathFun::LimitValue(a.y, sat_vel.y);
@@ -495,6 +506,13 @@ private:
         return (det_res[id] >> vsl_id) & 1;
     }
 
+    bool has_someone_det(int vsl_id){
+        for (int i = 1; i <= sUAV_NUM; i++){
+            if (has_det(i, vsl_id)) return true;
+        }
+        return false;
+    }
+
     void new_det_res(int id, int vsl_id){
         if (!has_det(id, vsl_id)){
             det_res[id] += (1 << vsl_id);
@@ -503,7 +521,7 @@ private:
 
     int tgt_vsl_det_id(){
         int vsl_id = TARGET_VESSEL - 'a';
-        for (int i = 1; i <= UAV_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             if (has_det(i, vsl_id)) return i;
         }
         return 0;
@@ -548,7 +566,7 @@ private:
 
     int which_bridge(int id){
         std::vector<int> bdg;
-        for (int i = 1; i <= UAV_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             if (if_i_am_bridge(i)){
                 bdg.push_back(i);
             }
@@ -560,7 +578,7 @@ private:
 
     int bridge_at(int pos){
         std::vector<int> bdg;
-        for (int i = 1; i <= UAV_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             if (if_i_am_bridge(i)){
                 bdg.push_back(i);
             }
@@ -582,26 +600,40 @@ private:
         return distance;
     }
 
+    bool same_side(int id){
+        return (id > (sUAV_NUM / 2)) == (sUAV_id > (sUAV_NUM / 2));
+    }
+
+    int scissor_part_id(int id){
+        if (id > sUAV_NUM / 2) id -= sUAV_NUM / 2;
+        return id;
+    }
+
+    template<typename T>
+    double scissor_theta(T target){
+        return MyDataFun::angle_2d(MyDataFun::new_point(-1450, 0, 0), target);
+    }
+
     double scissor_length(double theta){
         theta = std::abs(theta);
         double width = 3000.0, length = 3000.0;
         double gamma = std::atan(width / length / 2.0);
         if (theta > gamma){
-            return (width / 2.0 / std::sin(theta)) / (UAV_NUM / 2.0 + 1);
+            return (width / 2.0 / std::sin(theta)) / (sUAV_NUM / 2.0 + 1);
         }
         else {
-            return (length / std::cos(theta)) / (UAV_NUM / 2.0 + 1);
+            return (length / std::cos(theta)) / (sUAV_NUM / 2.0 + 1);
         }
     }
 
     Point scissor_point(double theta, double unit_l, double unit_h, double scissor_height = 50.0){
         Point res;
-        int part_id = (sUAV_id > 7) ? (sUAV_id - 7) : sUAV_id;
+        int part_id = (sUAV_id > sUAV_NUM / 2) ? (sUAV_id - sUAV_NUM / 2) : sUAV_id;
         res.x = part_id * unit_l;
         res.y = (sUAV_id % 2) ? unit_h : -unit_h;
         res.z = scissor_height;
 
-        theta = (sUAV_id > 7) ? (-abs(theta)) : (abs(theta));
+        theta = (sUAV_id > sUAV_NUM / 2) ? (-abs(theta)) : (abs(theta));
 
         Point sci;
         sci.x = res.x * std::cos(theta) - res.y * std::sin(theta) - 1450;
@@ -620,6 +652,8 @@ private:
         cmd.linear.y *= Y_KP;
         cmd.linear.z *= Z_KP;
         printf("Vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        saturate_length(cmd.linear);
+        printf("Sat vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         e2b(cmd.linear);
         printf("Vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
@@ -745,8 +779,8 @@ private:
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
         if (is_near(search_tra[search_tra_finish], 5)){
             bool wait_flag = false;
-            for (int i = 1; i <= UAV_NUM; i++){
-                if ((i > 7) == (sUAV_id > 7)){
+            for (int i = 1; i <= sUAV_NUM; i++){
+                if (same_side(i)){
                     if (search_progress[i] < search_tra_finish || search_progress[i] == 255){
                         wait_flag = true;
                     }
@@ -764,40 +798,90 @@ private:
                 }
             }
         }    
-        bool finish_flag = true;
-        for (int i = 0; i < VESSEL_NUM; i++){
-            bool tmp_flag = false;
-            for (int j = 1; j <= UAV_NUM; j++){
-                if (has_det(j, i)){
-                    tmp_flag = true;
+        // bool finish_flag = true;
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     bool tmp_flag = false;
+        //     for (int j = 1; j <= sUAV_NUM; j++){
+        //         if (has_det(j, i)){
+        //             tmp_flag = true;
+        //         }
+        //     }
+        //     if (!tmp_flag) finish_flag = false;
+        // }
+        // if (finish_flag){
+        //     task_state = BACK;
+        // }
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     if (is_near_2d(vsl_pos[i], 3000) && det_cnt[i] >= 50){
+        //         printf("Got Vessel %c!\n", 'A' + i);
+        //         bool other_flag = false;
+        //         for (int j = 1; j <= sUAV_NUM; j++){
+        //             if (j == sUAV_id) continue;
+        //             if (has_det(j, i)){
+        //                 printf("But UAV %d has got it!\n", j);
+        //                 other_flag = true;
+        //             }
+        //         }
+        //         if (other_flag) continue;
+        //         new_det_res(sUAV_id, i);
+        //         if ((map_res >> i) & 1){
+        //             printf("Already Mapped Vessel %c!\n", 'A' + i);
+        //             continue;
+        //         }
+        //         vsl_id = i;
+        //         // search_tra_finish = 0;
+        //         task_state = PURSUE;
+        //     }
+        // }
+        if (is_near_2d(vsl_pos[TARGET_VESSEL - 'a'], 3000) && det_cnt[TARGET_VESSEL - 'a'] >= 50){
+            printf("Got Vessel %c!\n", TARGET_VESSEL);
+            bool other_flag = false;
+            for (int j = 1; j <= sUAV_NUM; j++){
+                if (j == sUAV_id) continue;
+                if (has_det(j, TARGET_VESSEL - 'a')){
+                    printf("But UAV %d has got it!\n", j);
+                    other_flag = true;
                 }
             }
-            if (!tmp_flag) finish_flag = false;
+            if (!other_flag){
+                new_det_res(sUAV_id, TARGET_VESSEL - 'a');
+            }
         }
-        if (finish_flag){
+        if (has_someone_det(TARGET_VESSEL - 'a') && same_side(tgt_vsl_det_id())){
+            task_state = PURSUE;
+        }
+    }
+
+    void StepPursue(){
+        double theta = scissor_theta(vsl_det_pos[TARGET_VESSEL - 'a']);
+        Point pursue_point = scissor_point(theta, scissor_length(theta), 100, 30);
+        printf("Target Vessel @ %s\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str());
+        printf("Pursue to %s\n", MyDataFun::output_str(pursue_point).c_str());
+        UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
+
+        int det_id = tgt_vsl_det_id();
+        if (same_side(det_id)){
+            std_msgs::msg::String data;
+            if (det_id == sUAV_id){
+                if (sUAV_id % (sUAV_NUM / 2) == 1){
+                    data.data = "vessel_det_one";
+                }
+                else {
+                    data.data = "vessel_det_source_" + std::to_string(sUAV_id - 1);
+                }
+            }
+            else{
+                if (sUAV_id % (sUAV_NUM / 2) == 1){
+                    data.data = "vessel_det_upload";
+                }
+                else if (sUAV_id < det_id){
+                    data.data = "vessel_det_bridge_" + std::to_string(sUAV_id - 1);
+                }
+            }
+            vsl_det_cmd_pub->publish(data);
+        }
+        if (status == "vessel_id_success"){
             task_state = BACK;
-        }
-        for (int i = 0; i < VESSEL_NUM; i++){
-            if (is_near_2d(vsl_pos[i], 3000) && det_cnt[i] >= 50){
-                printf("Got Vessel %c!\n", 'A' + i);
-                bool other_flag = false;
-                for (int j = 1; j <= UAV_NUM; j++){
-                    if (j == sUAV_id) continue;
-                    if (has_det(j, i)){
-                        printf("But UAV %d has got it!\n", j);
-                        other_flag = true;
-                    }
-                }
-                if (other_flag) continue;
-                new_det_res(sUAV_id, i);
-                if ((map_res >> i) & 1){
-                    printf("Already Mapped Vessel %c!\n", 'A' + i);
-                    continue;
-                }
-                vsl_id = i;
-                // search_tra_finish = 0;
-                task_state = HOLD;
-            }
         }
     }
 	
@@ -873,43 +957,43 @@ private:
         printf("Scissor @ (%s)\n", MyDataFun::output_str(search_tra[0]).c_str());
 
         printf("Search Progress: ");
-        for (int i = 1; i <= UAV_NUM; i++){
-            if ((i > 7) == (sUAV_id > 7)){
+        for (int i = 1; i <= sUAV_NUM; i++){
+            if (same_side(i)){
                 printf("%d/", search_progress[i]);
             }
         }
         printf("\n");
 
-        // printf("Detection Counter: ");
-        // for (int i = 0; i < VESSEL_NUM; i++){
-        //     printf("%c:(%d) ", 'A' + i, det_cnt[i]);
-        // }
-        // printf("\nDetection Status: ");
-        // for (int i = 0; i < VESSEL_NUM; i++){
-        //     if (has_det(sUAV_id, i)) printf("%c", 'A' + i);
-        // }
+        printf("Detection Counter: ");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            printf("%c:(%d) ", 'A' + i, det_cnt[i]);
+        }
+        printf("\nDetection Status: ");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            if (has_det(sUAV_id, i)) printf("%c", 'A' + i);
+        }
         // printf("\nMap Status: ");
         // for (int i = 0; i < VESSEL_NUM; i++){
         //     if (map_res >> i & 1) printf("%c", 'A' + i);
         // }
-        // printf("\n");
-        // for (int i = 0; i < VESSEL_NUM; i++){
-        //     printf("%s/", MyDataFun::output_str(vsl_det_pos[i]).c_str());
-        // }printf("\n");
-        // printf("det_res:");
-        // for (int i = 1; i <= UAV_NUM; i++){
-        //     for (int j = 0; j < VESSEL_NUM; j++){
-        //         if (has_det(i, j)) printf("%c", 'A' + j);
-        //     }
-        //     printf("/");
-        // }printf("\n");
+        printf("\n");
+        for (int i = 0; i < VESSEL_NUM; i++){
+            printf("%s/", MyDataFun::output_str(vsl_det_pos[i]).c_str());
+        }printf("\n");
+        printf("det_res:");
+        for (int i = 1; i <= sUAV_NUM; i++){
+            for (int j = 0; j < VESSEL_NUM; j++){
+                if (has_det(i, j)) printf("%c", 'A' + j);
+            }
+            printf("/");
+        }printf("\n");
 
         if (get_time_now() > last_comm_time + 0.5) {
             last_comm_time = get_time_now();
             ros_ign_interfaces::msg::Dataframe com_pub_data;
             com_pub_data.data.resize(VESSEL_NUM * VSL_DET_ENCODE_SIZE);
             for (int i = 0; i < VESSEL_NUM; i++){
-                for (int j = 1; j <= UAV_NUM; j++){
+                for (int j = 1; j <= sUAV_NUM; j++){
                     if (has_det(j, i)){
                         if (j == sUAV_id) {
                             MyDataFun::set_value(vsl_det_pos[i], vsl_pos[i]);
@@ -934,7 +1018,7 @@ private:
             }
 
             com_pub_data.src_address = "suav_" + std::to_string(sUAV_id);
-            for (int i = 1; i <= UAV_NUM; i++){
+            for (int i = 1; i <= sUAV_NUM; i++){
                 if (i == sUAV_id) continue;
                 com_pub_data.dst_address = "suav_" + std::to_string(i);
                 com_pub->publish(com_pub_data);
@@ -948,13 +1032,13 @@ private:
         }
         ros_ign_interfaces::msg::Dataframe search_com_data;
         search_progress[sUAV_id] = search_tra_finish;
-        search_com_data.data.resize(UAV_NUM + 1);
-        for (int i = 1; i <= UAV_NUM; i++){
+        search_com_data.data.resize(sUAV_NUM + 1);
+        for (int i = 1; i <= sUAV_NUM; i++){
             search_com_data.data[i] = search_progress[i];
         }
 
         search_com_data.src_address = "suav_" + std::to_string(sUAV_id);
-        for (int i = 1; i <= UAV_NUM; i++){
+        for (int i = 1; i <= sUAV_NUM; i++){
             if (i == sUAV_id) continue;
             search_com_data.dst_address = "suav_" + std::to_string(i);
             com_pub->publish(search_com_data);
@@ -965,10 +1049,10 @@ private:
         // det_pub->publish(tmp); 
 
         if (task_state < BACK){
-            if (if_i_am_bridge(sUAV_id) && cmd != 0){
-                bridge_point = bridge_pos<Point>(sUAV_id);
-                task_state = BRIDGE;
-            }
+            // if (if_i_am_bridge(sUAV_id) && cmd != 0){
+            //     bridge_point = bridge_pos<Point>(sUAV_id);
+            //     task_state = BRIDGE;
+            // }
             if (status.find("vessel_id_success") != std::string::npos){
                 task_state = BACK;
             }
@@ -993,6 +1077,10 @@ private:
             }
             case SEARCH:{
                 StepSearch();
+                break;
+            }
+            case PURSUE:{
+                StepPursue();
                 break;
             }
             case BRIDGE:{

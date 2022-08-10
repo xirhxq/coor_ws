@@ -98,6 +98,11 @@ namespace MyDataFun{
     }
 
     template<typename T>
+    double norm(T a){
+        return std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+    }
+
+    template<typename T>
     std::string output_str(T a){
         char s[50];
         sprintf(s, "(%.2lf, %.2lf, %.2lf)", a.x, a.y, a.z);
