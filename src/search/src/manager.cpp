@@ -9,6 +9,8 @@
 #include <cmath>
 
 #include "Utils.h"
+#include "MyMathFun.h"
+#include "MyDataFun.h"
 
 #include "rclcpp/rclcpp.hpp"
 #include "rosgraph_msgs/msg/clock.hpp"
@@ -16,7 +18,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float32.hpp"
 
-#define sUAV_NUM 10
+#define sUAV_NUM 14
 #define VESSEL_NUM 7
 
 using namespace geometry_msgs::msg;
@@ -189,6 +191,25 @@ public:
         std::cout << "\033c" << std::flush;
         log_once();
         output_map();
+        for (int i = 1; i <= sUAV_NUM; i++){
+            if (real_suav_pos[i].z < 1) continue;
+            printf("%d ", i);
+            for (int j = i - 2; j < i; j++){
+                if (j < 1) continue;
+                if ((i > sUAV_NUM / 2) != (j > sUAV_NUM / 2)) continue;
+                if (real_suav_pos[j].z < 1) continue;
+                printf("to %d : %.2lf\t", j, MyDataFun::dis(real_suav_pos[i], real_suav_pos[j]));
+            }
+            printf("\n");
+            if (i == 1 || i == 2 || i == sUAV_NUM / 2 + 1 || i == sUAV_NUM / 2 + 2){
+                printf("%d -- %s : %.2lf\n", i, MyDataFun::output_str(MyDataFun::new_point(-1500, -500, 0)).c_str(),
+                                                MyDataFun::dis(real_suav_pos[i], MyDataFun::new_point(-1500, -500, 0)));
+                printf("%d -- %s : %.2lf\n", i, MyDataFun::output_str(MyDataFun::new_point(-1500, 500, 0)).c_str(),
+                                                MyDataFun::dis(real_suav_pos[i], MyDataFun::new_point(-1500, 500, 0)));
+                printf("%d -- %s : %.2lf\n", i, MyDataFun::output_str(MyDataFun::new_point(-1500, 0, 0)).c_str(),
+                                                MyDataFun::dis(real_suav_pos[i], MyDataFun::new_point(-1500, 0, 0)));
+            }
+        }
         // printf("Log!\n");
     }
 
@@ -215,7 +236,7 @@ public:
             mp[l - 1 - f(real_vsl_pos[i].x, l)][w - 1 - f(real_vsl_pos[i].y, w)] = 'A' + i;
         }
         for (int i = 1; i <= sUAV_NUM; i++){
-            char c = i == 10? '0' : '0' + i;
+            char c = i >= 10? 'a' + i - 10 : '0' + i;
             if (real_suav_pos[i].z <= 1) continue;
             mp[l - 1 - f(real_suav_pos[i].x, l)][w - 1 - f(real_suav_pos[i].y, w)] = c;
         }
@@ -229,7 +250,7 @@ public:
                 if (mp[i][j] >= 'A' && mp[i][j] <= 'G'){
                     std::cout << BOLDGREEN << mp[i][j] << RESET;
                 }
-                else if (mp[i][j] >= '0' && mp[i][j] <= '9'){
+                else if ((mp[i][j] >= '0' && mp[i][j] <= '9') || (mp[i][j] >= 'a' && mp[i][j] <= 'z')){
                     std::cout << BOLDYELLOW << mp[i][j] << RESET;
                 }
                 else std::cout << mp[i][j];

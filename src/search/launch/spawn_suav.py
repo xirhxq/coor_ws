@@ -44,7 +44,9 @@ def my_function(context):
                     'slot0': 'mbzirc_hd_camera',
                     'slot0_rpy': '0 30 0',
                     'gripper': 'mbzirc_suction_gripper',
-                    'flightTime': '60'
+                    'flightTime': '60',
+                    'slot1': 'mbzirc_rf_long_range',
+                    'slot1_rpy': '0 0 0'
                 }.items()
             )
             

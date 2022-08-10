@@ -17,7 +17,7 @@ import math
 target = 'search' # 'search' or 'base'
 scale = 'whole' # 'whole' or 'tight'
 
-total_num = 10 if target == 'search' else 6
+total_num = 14 if target == 'search' else 6
 
 tic = time.time()
 ptn = re.compile('.*_Manager.txt')
@@ -52,7 +52,7 @@ data = data.loc[(data[real_l]!=0).all(axis=1), :]
 data = data.reset_index(drop=True)
 print(data)
 
-skip_num = 150
+skip_num = 300
 
 total_length = int(len(data[target[0] + 'uav_1_x']) / skip_num)
 
@@ -100,8 +100,8 @@ ax.view_init(30, -60)
 plt.gca().set_box_aspect((max_x - min_x, max_y - min_y,  2 * (max_z - min_z)))
 plt.title(target[0] + 'UAV Trajectory')
 
-pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][0] for j in range(0, 3)] for i in range(1, 11)]
-pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, 10) if any(pos_list[i])]
+pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][0] for j in range(0, 3)] for i in range(1, total_num + 1)]
+pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, total_num) if any(pos_list[i])]
 pos_marker, = ax.plot([i[0] for i in pos_list], [i[1] for i in pos_list], [i[2] for i in pos_list], 'b*')
 
 if 'run_time' in data:
@@ -127,8 +127,8 @@ def update(num):
         l_vessel[i].set_data(data[vsl_name + '_x'][0:skip_num * num + 1: skip_num].values.tolist(),
                              data[vsl_name + '_y'][0:skip_num * num + 1: skip_num].values.tolist())
         l_vessel[i].set_3d_properties(data[vsl_name + '_z'][0:skip_num * num + 1: skip_num].values.tolist())    
-    pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][skip_num * num] for j in range(0, 3)] for i in range(1, 11)]
-    pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, 10) if any(pos_list[i])]
+    pos_list = [[data['suav_' + str(i) + '_' + chr(ord('x') + j)][skip_num * num] for j in range(0, 3)] for i in range(1, total_num + 1)]
+    pos_list = [[pos_list[i][j] for j in range(0, 3)] for i in range(0, total_num) if any(pos_list[i])]
     pos_marker.set_data([i[0] for i in pos_list], [i[1] for i in pos_list])
     pos_marker.set_3d_properties([i[2] for i in pos_list])
     if 'run_time' in data:

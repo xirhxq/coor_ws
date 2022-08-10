@@ -1,7 +1,7 @@
 #!/bin/bash
 gnome-terminal --tab -- bash -c "ros2 launch mbzirc_ros competition_local.launch.py ign_args:=\" -v 4 -r coast.sdf\" ;exec bash" 
 gnome-terminal --tab -- bash -c "ros2 run ros_ign_bridge my_bridge; exec bash"
-gnome-terminal --tab -- bash -c "ros2 launch vessel_det vessel_det_launch_multi_uav.py numbers:='$*'"
+# gnome-terminal --tab -- bash -c "ros2 launch vessel_det vessel_det_launch_multi_uav.py numbers:='$*'"
 echo "Type anything to spawn UAVs..."
 read a
 gnome-terminal --tab -- bash -c "sleep 2; ros2 launch search spawn_suav.py numbers:='$*'"
@@ -14,10 +14,10 @@ read b
 gnome-terminal --tab -- bash -c "ros2 run search manager"
 gnome-terminal --tab -- bash -c "ros2 run search commander"
 for i in "$@"; do
-	if test $i -gt 5
+	if test $i -gt 7
 	then
 		# echo "second row";
-		ii=`expr $i - 5`
+		ii=`expr $i - 7`
 		wd_y=600
 	else
 		# echo "first row";
