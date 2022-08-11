@@ -189,7 +189,10 @@ public:
     Point bridge_point;
 
     // Last communication time in simulation
-    double last_comm_time;
+    double last_comm_time_det;
+
+    // Last comm time
+    double last_comm_time_search;
 
 
     sUAV(char *name) : Node("suav_" + std::string(name)) {
@@ -393,7 +396,7 @@ public:
 
         prepare_point = scissor_point(85 * DEG2RAD, 50, 30 + 2 * scissor_part_id(sUAV_id));
         for (int i = 85; i >= 10; i -= 1){
-            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 30 + 2 * scissor_part_id(sUAV_id)));
+            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 50 + 2 * scissor_part_id(sUAV_id)));
         }
 
 
@@ -406,9 +409,11 @@ public:
         
         for (int i = 1; i <= sUAV_NUM; i++){
             det_res[i] = 0;
+            search_progress[i] = (1 << 8) - 1;
         }
 
-        last_comm_time = 0.0;
+        last_comm_time_det = 0.0;
+        last_comm_time_search = 0.0;
 
     }
 
@@ -854,7 +859,7 @@ private:
 
     void StepPursue(){
         double theta = scissor_theta(vsl_det_pos[TARGET_VESSEL - 'a']);
-        Point pursue_point = scissor_point(theta, scissor_length(theta), 100, 30);
+        Point pursue_point = scissor_point(theta, scissor_length(theta), 100, 50);
         printf("Target Vessel @ %s\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str());
         printf("Pursue to %s\n", MyDataFun::output_str(pursue_point).c_str());
         UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
@@ -953,8 +958,8 @@ private:
         
         printf("Phi %.2lf, Theta %.2lf, Psi %.2lf\n", UAV_Euler[0] * RAD2DEG, UAV_Euler[1] * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         
-        printf("Prepare @ (%s)\n", MyDataFun::output_str(prepare_point).c_str());
-        printf("Scissor @ (%s)\n", MyDataFun::output_str(search_tra[0]).c_str());
+        printf("Prepare @ %s\n", MyDataFun::output_str(prepare_point).c_str());
+        printf("Stretch @ %s\n", MyDataFun::output_str(search_tra[0]).c_str());
 
         printf("Search Progress: ");
         for (int i = 1; i <= sUAV_NUM; i++){
@@ -977,9 +982,9 @@ private:
         //     if (map_res >> i & 1) printf("%c", 'A' + i);
         // }
         printf("\n");
-        for (int i = 0; i < VESSEL_NUM; i++){
-            printf("%s/", MyDataFun::output_str(vsl_det_pos[i]).c_str());
-        }printf("\n");
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     printf("%s/", MyDataFun::output_str(vsl_det_pos[i]).c_str());
+        // }printf("\n");
         printf("det_res:");
         for (int i = 1; i <= sUAV_NUM; i++){
             for (int j = 0; j < VESSEL_NUM; j++){
@@ -988,8 +993,10 @@ private:
             printf("/");
         }printf("\n");
 
-        if (get_time_now() > last_comm_time + 0.5) {
-            last_comm_time = get_time_now();
+        printf("Last comm det @ %.2lf, search @ %.2lf\n", last_comm_time_det, last_comm_time_search);
+
+        if (get_time_now() > last_comm_time_det + 0.5) {
+            last_comm_time_det = get_time_now();
             ros_ign_interfaces::msg::Dataframe com_pub_data;
             com_pub_data.data.resize(VESSEL_NUM * VSL_DET_ENCODE_SIZE);
             for (int i = 0; i < VESSEL_NUM; i++){
@@ -1030,18 +1037,22 @@ private:
                 com_pub->publish(com_pub_data);
             }
         }
-        ros_ign_interfaces::msg::Dataframe search_com_data;
-        search_progress[sUAV_id] = search_tra_finish;
-        search_com_data.data.resize(sUAV_NUM + 1);
-        for (int i = 1; i <= sUAV_NUM; i++){
-            search_com_data.data[i] = search_progress[i];
-        }
 
-        search_com_data.src_address = "suav_" + std::to_string(sUAV_id);
-        for (int i = 1; i <= sUAV_NUM; i++){
-            if (i == sUAV_id) continue;
-            search_com_data.dst_address = "suav_" + std::to_string(i);
-            com_pub->publish(search_com_data);
+        if (get_time_now() > last_comm_time_search + 0.2){
+            last_comm_time_search = get_time_now();
+            ros_ign_interfaces::msg::Dataframe search_com_data;
+            search_progress[sUAV_id] = search_tra_finish;
+            search_com_data.data.resize(sUAV_NUM + 1);
+            for (int i = 1; i <= sUAV_NUM; i++){
+                search_com_data.data[i] = search_progress[i];
+            }
+
+            search_com_data.src_address = "suav_" + std::to_string(sUAV_id);
+            for (int i = 1; i <= sUAV_NUM; i++){
+                if (i == sUAV_id) continue;
+                search_com_data.dst_address = "suav_" + std::to_string(i);
+                com_pub->publish(search_com_data);
+            }
         }
 
         std_msgs::msg::Int16 tmp;

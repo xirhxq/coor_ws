@@ -14,10 +14,10 @@ read b
 gnome-terminal --tab -- bash -c "ros2 run search manager"
 gnome-terminal --tab -- bash -c "ros2 run search commander"
 for i in "$@"; do
-	if test $i -gt 5
+	if test $i -gt 7
 	then
 		# echo "second row";
-		ii=`expr $i - 5`
+		ii=`expr $i - 7`
 		wd_y=600
 	else
 		# echo "first row";
