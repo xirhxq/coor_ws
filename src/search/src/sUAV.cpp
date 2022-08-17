@@ -326,16 +326,16 @@ public:
                                 tmp[j] /= 100.0;
                                 if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
                             }
-                        if (tmp[4] > det_res_time[i] && other_id != 0){
-                            printf("Has get %d's detection result for %d\n", other_id, i);
-                                // del_det_res(det_res[i], i);
-                            if (!has_someone_det(i)){
-                                new_det_res(other_id, i);
+                            if (tmp[4] > det_res_time[i] && other_id != 0){
+                                printf("Has get %d's detection result for %d\n", other_id, i);
+                                    // del_det_res(det_res[i], i);
+                                if (!has_someone_det(i)){
+                                    new_det_res(other_id, i);
+                                }
+                                MyDataFun::set_value(vsl_det_pos[i], tmp);
+                                vsl_det_yaw[i] = tmp[3];
+                                det_res_time[i] = tmp[4];
                             }
-                            MyDataFun::set_value(vsl_det_pos[i], tmp);
-                            vsl_det_yaw[i] = tmp[3];
-                            det_res_time[i] = tmp[4];
-                        }
                     }
                 }
                 else if (msg.data.size() == sUAV_NUM + 1){
@@ -1100,29 +1100,36 @@ private:
         }
         printf("\n");
 
-        printf("Detection Counter: ");
-        for (int i = 0; i < VESSEL_NUM; i++){
-            printf("%c:(%d) ", 'A' + i, det_cnt[i]);
-        }
-        printf("\nDetection Status: ");
+        printf("My det: %c(%d) %s %.2lf\n", TARGET_VESSEL, det_cnt[TARGET_VESSEL - 'a'],
+                                             MyDataFun::output_str(vsl_pos[TARGET_VESSEL - 'a']).c_str(),
+                                             vsl_det_time[TARGET_VESSEL - 'a']);
+        
+        printf("Everyone det: %s by %d Time: %.2lf Yaw: %.2lf\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str(),
+                                           tgt_vsl_det_id(),
+                                           det_res_time[TARGET_VESSEL - 'a'], vsl_det_yaw[i] * RAD2DEG);
+
+        // printf("Detection Counter: ");
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     printf("%c:(%d) ", 'A' + i, det_cnt[i]);
+        // }printf("\n");
+        printf("Detection Status: ");
         for (int i = 0; i < VESSEL_NUM; i++){
             if (has_det(sUAV_id, i)) printf("%c", 'A' + i);
-        }
-        // printf("\nMap Status: ");
+        }printf("\n");
+        // printf("Map Status: ");
         // for (int i = 0; i < VESSEL_NUM; i++){
         //     if (map_res >> i & 1) printf("%c", 'A' + i);
-        // }
-        printf("\n");
-        for (int i = 0; i < VESSEL_NUM; i++){
-            printf("%s,%.2lf/", MyDataFun::output_str(vsl_det_pos[i]).c_str(), vsl_det_yaw[i] * RAD2DEG);
-        }printf("\n");
-        printf("det_res:");
-        for (int i = 1; i <= sUAV_NUM; i++){
-            for (int j = 0; j < VESSEL_NUM; j++){
-                if (has_det(i, j)) printf("%c%.0lf", 'A' + j, det_res_time[j]);
-            }
-            printf("/");
-        }printf("\n");
+        // }printf("\n");
+        // for (int i = 0; i < VESSEL_NUM; i++){
+        //     printf("%s,%.2lf/", MyDataFun::output_str(vsl_det_pos[i]).c_str(), vsl_det_yaw[i] * RAD2DEG);
+        // }printf("\n");
+        // printf("det_res:");
+        // for (int i = 1; i <= sUAV_NUM; i++){
+        //     for (int j = 0; j < VESSEL_NUM; j++){
+        //         if (has_det(i, j)) printf("%c%.0lf", 'A' + j, det_res_time[j]);
+        //     }
+        //     printf("/");
+        // }printf("\n");
         printf("Last det time @ %.2lf, start @ %.2lf\n", vsl_det_time[TARGET_VESSEL - 'a'], det_start_time[TARGET_VESSEL - 'a']);
 
         printf("Last comm det @ %.2lf, search @ %.2lf\n", last_comm_time_det, last_comm_time_search);
