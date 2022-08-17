@@ -11,7 +11,7 @@
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'e'
+#define TARGET_VESSEL 'c'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -460,6 +460,7 @@ public:
         for (int i = 0; i < VESSEL_NUM; i++){
             double far_away[3] = {5000.0, 5000.0, 5000.0};
             MyDataFun::set_value(vsl_pos[i], far_away);
+            vsl_det_time[i] = 0.0;
         }
         
         for (int i = 1; i <= sUAV_NUM; i++){
@@ -1115,6 +1116,7 @@ private:
             }
             printf("/");
         }printf("\n");
+        printf("Last det time @ %.2lf, start @ %.2lf\n", vsl_det_time[TARGET_VESSEL - 'a'], det_start_time[TARGET_VESSEL - 'a']);
 
         printf("Last comm det @ %.2lf, search @ %.2lf\n", last_comm_time_det, last_comm_time_search);
 
