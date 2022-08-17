@@ -2,4 +2,5 @@ build/
 log/
 install/
 src/base.zip
+src/base/*
 .*

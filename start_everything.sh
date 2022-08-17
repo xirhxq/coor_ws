@@ -13,17 +13,20 @@ echo "Type anything to start control..."
 read b
 gnome-terminal --tab -- bash -c "ros2 run search manager"
 gnome-terminal --tab -- bash -c "ros2 run search commander"
+cnt=0
 for i in "$@"; do
-	if test $i -gt 7
+	cnt=`expr $cnt + 1`
+	if test $cnt -gt 4
 	then
 		# echo "second row";
-		ii=`expr $i - 7`
-		wd_y=600
+		ii=`expr $cnt - 4`
+		wd_y=550
 	else
 		# echo "first row";
-		ii=$i 
+		ii=$cnt
 		wd_y=33
 	fi
     wd_x=`expr $ii \* 340 - 260`
-	gnome-terminal --geometry=36x28+${wd_x}+${wd_y} --window -- bash -c "ros2 run search sUAV ${i}"
+	# gnome-terminal --geometry=36x25+${wd_x}+${wd_y} --tab -- bash -c "ros2 run search sUAV ${i}"
+	gnome-terminal --tab -- bash -c "ros2 run search sUAV ${i}"
 done

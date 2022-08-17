@@ -8,6 +8,7 @@
 #include <fstream>
 #include <ctime>
 #include <queue>
+#include <deque>
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -23,6 +24,7 @@
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/pose2_d.hpp"
 
 #include "target_bbox_msgs/msg/bounding_boxes.hpp"
 
