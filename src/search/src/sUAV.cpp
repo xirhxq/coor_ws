@@ -177,6 +177,9 @@ public:
     // [StepSearch] Detection started time
     double det_start_time[VESSEL_NUM];
 
+    // [StepSearch] Detection result time stamp
+    double det_res_time[VESSEL_NUM];
+
     // [StepSearch] Vessel position result altogether
     Point vsl_det_pos[VESSEL_NUM];
 
@@ -310,7 +313,7 @@ public:
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
                 // assert(msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM);
                 if (msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM){
-                    // printf("msg time: %.2lf\n", msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9);
+                    printf("msg (%ld) time: %.2lf\n", msg.data.size(), msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9);
                     for (int i = 0; i < VESSEL_NUM; i++){
                         // if (msg.data[i * VSL_DET_ENCODE_SIZE] != 0 && msg.data[i * VSL_DET_ENCODE_SIZE] != sUAV_id){
                             int other_id = msg.data[i * VSL_DET_ENCODE_SIZE];
@@ -323,13 +326,15 @@ public:
                                 tmp[j] /= 100.0;
                                 if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
                             }
-                        if (tmp[4] > vsl_det_time[i]){
+                        if (tmp[4] > det_res_time[i] && other_id != 0){
+                            printf("Has get %d's detection result for %d\n", other_id, i);
                                 // del_det_res(det_res[i], i);
                             if (!has_someone_det(i)){
                                 new_det_res(other_id, i);
                             }
                             MyDataFun::set_value(vsl_det_pos[i], tmp);
                             vsl_det_yaw[i] = tmp[3];
+                            det_res_time[i] = tmp[4];
                         }
                     }
                 }
@@ -461,6 +466,7 @@ public:
             double far_away[3] = {5000.0, 5000.0, 5000.0};
             MyDataFun::set_value(vsl_pos[i], far_away);
             vsl_det_time[i] = 0.0;
+            det_res_time[i] = 0.0;
         }
         
         for (int i = 1; i <= sUAV_NUM; i++){
@@ -502,6 +508,7 @@ private:
             vis_vsl_pos = vsl_pos_fil[vis_vsl_num].result();
             MyDataFun::set_value(vsl_pos[vis_vsl_num], vis_vsl_pos);
             vsl_det_time[vis_vsl_num] = get_time_now();
+            det_res_time[vis_vsl_num] = get_time_now();
             det_cnt[vis_vsl_num]++;
             if (det_cnt[vis_vsl_num] >= 40 && det_cnt[vis_vsl_num] <= 50){
                 det_start_time[vis_vsl_num] = get_time_now();
@@ -1112,7 +1119,7 @@ private:
         printf("det_res:");
         for (int i = 1; i <= sUAV_NUM; i++){
             for (int j = 0; j < VESSEL_NUM; j++){
-                if (has_det(i, j)) printf("%c%.0lf", 'A' + j, det_start_time[j]);
+                if (has_det(i, j)) printf("%c%.0lf", 'A' + j, det_res_time[j]);
             }
             printf("/");
         }printf("\n");
@@ -1131,7 +1138,7 @@ private:
                             MyDataFun::set_value(vsl_det_pos[i], vsl_pos[i]);
                         }
                         com_pub_data.data[i * VSL_DET_ENCODE_SIZE] = j;
-                        double tmp[5] = {vsl_det_pos[i].x * 100, vsl_det_pos[i].y * 100, vsl_det_pos[i].z * 100, vsl_det_yaw[i] * 100, vsl_det_time[i] * 100};
+                        double tmp[5] = {vsl_det_pos[i].x * 100, vsl_det_pos[i].y * 100, vsl_det_pos[i].z * 100, vsl_det_yaw[i] * 100, det_res_time[i] * 100};
                         for (int k = 0; k < 5; k++){
                             if (tmp[k] < 0) {
                                 com_pub_data.data[i * VSL_DET_ENCODE_SIZE + k * DOUBLE_ENCODE_SIZE + 1] = 1;
@@ -1152,6 +1159,7 @@ private:
             com_pub_data.src_address = "suav_" + std::to_string(sUAV_id);
             for (int i = 1; i <= sUAV_NUM; i++){
                 if (i == sUAV_id) continue;
+                if (i <= sUAV_id - 2 || i >= sUAV_id + 2) continue;
                 com_pub_data.dst_address = "suav_" + std::to_string(i);
                 com_pub->publish(com_pub_data);
             }
@@ -1175,6 +1183,7 @@ private:
             search_com_data.src_address = "suav_" + std::to_string(sUAV_id);
             for (int i = 1; i <= sUAV_NUM; i++){
                 if (i == sUAV_id) continue;
+                if (i <= sUAV_id - 2 || i >= sUAV_id + 2) continue;
                 search_com_data.dst_address = "suav_" + std::to_string(i);
                 com_pub->publish(search_com_data);
             }
