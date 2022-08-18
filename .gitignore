@@ -3,4 +3,5 @@ log/
 install/
 src/base.zip
 src/base/*
+src/search/data/*
 .*
