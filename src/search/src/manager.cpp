@@ -63,8 +63,8 @@ public:
         time_t tt = time(NULL);
         tm* t = localtime(&tt);
         char iden_path[256];
-        sprintf(iden_path, "/home/ps/coor_ws/src/search/data/%02d-%02d_%02d-%02d_Manager.txt",
-        t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min);
+        sprintf(iden_path,  "%s/coor_ws/src/search/data/%02d-%02d_%02d-%02d_Manager.txt",
+        std::getenv("HOME"), t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min);
         log_file.open(iden_path, std::ios::out);
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
         

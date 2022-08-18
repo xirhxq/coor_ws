@@ -9,6 +9,7 @@
 #include <ctime>
 #include <queue>
 #include <deque>
+#include <stdlib.h>
 
 #include "rclcpp/rclcpp.hpp"
 

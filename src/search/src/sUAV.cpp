@@ -11,7 +11,7 @@
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'c'
+#define TARGET_VESSEL 'e'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -239,8 +239,8 @@ public:
         time_t tt = time(NULL);
         tm* t = localtime(&tt);
         char iden_path[256];
-        sprintf(iden_path, "/home/ps/coor_ws/src/search/data/%02d-%02d_%02d-%02d_%02d.txt",
-        t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, sUAV_id);
+        sprintf(iden_path, "%s/coor_ws/src/search/data/%02d-%02d_%02d-%02d_%02d.txt",
+        std::getenv("HOME"), t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, sUAV_id);
         log_file.open(iden_path, std::ios::out);
         while(!log_file) std::cout << "Error: Could not write data!" << std::endl;
         
@@ -313,7 +313,6 @@ public:
             [this](const ros_ign_interfaces::msg::Dataframe & msg){
                 // assert(msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM);
                 if (msg.data.size() == VSL_DET_ENCODE_SIZE * VESSEL_NUM){
-                    printf("msg (%ld) time: %.2lf\n", msg.data.size(), msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9);
                     for (int i = 0; i < VESSEL_NUM; i++){
                         // if (msg.data[i * VSL_DET_ENCODE_SIZE] != 0 && msg.data[i * VSL_DET_ENCODE_SIZE] != sUAV_id){
                             int other_id = msg.data[i * VSL_DET_ENCODE_SIZE];
@@ -339,13 +338,16 @@ public:
                     }
                 }
                 else if (msg.data.size() == sUAV_NUM + 1){
+                    printf("msg (%ld) time: %.2lf %s\n", msg.data.size(), msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9, msg.src_address.c_str());
                     for (int i = 1; i <= sUAV_NUM; i++){
+                        printf("%d", msg.data[i]);
                         if (i == sUAV_id) continue;
                         if (msg.data[i] == 255) continue;
                         if (msg.data[i] > search_progress[i] || search_progress[i] == 255){
                             search_progress[i] = msg.data[i];
                         }
                     }
+                    printf("\n");
                 }
                 else if (msg.data.size() == 1){
                     cmd = msg.data[0];
@@ -475,7 +477,7 @@ public:
         
         for (int i = 1; i <= sUAV_NUM; i++){
             det_res[i] = 0;
-            search_progress[i] = (1 << 8) - 1;
+            search_progress[i] = 255;
         }
 
         last_comm_time_det = 0.0;
@@ -843,7 +845,7 @@ private:
         }
         UAV_Control_earth(0, 0, 0, 0);
         task_begin_time = get_time_now();
-        search_tra_finish = (1 << 8) - 1;
+        search_tra_finish = 255;
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
             printf("Get Ground Truth Position!!!!!!!!!!!!!!!!!!!!!!\n");
             task_state = TAKEOFF;
@@ -863,6 +865,10 @@ private:
             std_msgs::msg::String data;
             data.data = "vessel_det";
             vsl_det_cmd_pub->publish(data);
+            for (int i = 1; i <= sUAV_NUM; i++){
+                det_res[i] = 0;
+                search_progress[i] = 255;
+            }
         }
     }
 
@@ -884,6 +890,7 @@ private:
         if (is_near(search_tra[0], 20)){
             task_state = SEARCH;
             search_tra_finish = 0;
+            search_progress[sUAV_id] = search_tra_finish;
             search_time = get_time_now();
         }
     }
@@ -903,6 +910,7 @@ private:
         printf("Desired angle %.2lf while now %.2lf\n", (tra_yaw + shaking_angle) * RAD2DEG, UAV_Euler[2] * RAD2DEG);
         // if (MyDataFun::dis_2d(search_tra[search_tra_finish], UAV_pos) <= 5) yaw_diff = 0;
         UAV_Control_earth(MyDataFun::minus(search_tra[search_tra_finish], UAV_pos), yaw_diff);
+        search_progress[sUAV_id] = search_tra_finish;
         if (is_near_2d(search_tra[search_tra_finish], 20)){
             search_wait_flag[search_tra_finish] = true;
         }
@@ -994,21 +1002,32 @@ private:
         UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
 
         int det_id = nxt_pursue_id(tgt_vsl_det_id());
-        if (same_side(det_id) && status != "vessel_id_success"){
+        if (same_side(det_id)){
             std_msgs::msg::String data;
-            if (det_id == sUAV_id){
-                if (sUAV_id % (sUAV_NUM / 2) == 1){
-                    data.data = "vessel_det_one";
+            if (status != "vessel_id_success"){
+                if (det_id == sUAV_id){
+                    if (sUAV_id % (sUAV_NUM / 2) == 1){
+                        data.data = "vessel_det_one";
+                    }
+                    // else if (rel_loc[TARGET_VESSEL - 'a'].size() >= rel_loc_buffer_size) {
+                    else if (get_time_now() >= det_start_time[TARGET_VESSEL - 'a'] + 20.0 && det_start_time[TARGET_VESSEL - 'a'] >= 10) {
+                        data.data = "vessel_det_source_" + std::to_string(sUAV_id - 1);
+                    }
+                    else {
+                        data.data = "vessel_det";
+                    }
                 }
-                // else if (rel_loc[TARGET_VESSEL - 'a'].size() >= rel_loc_buffer_size) {
-                else if (get_time_now() >= det_start_time[TARGET_VESSEL - 'a'] + 20.0 && det_start_time[TARGET_VESSEL - 'a'] >= 10) {
-                    data.data = "vessel_det_source_" + std::to_string(sUAV_id - 1);
-                }
-                else {
-                    data.data = "vessel_det";
+                else{
+                    if (sUAV_id % (sUAV_NUM / 2) == 1){
+                        data.data = "vessel_det_upload";
+                    }
+                    // else if (sUAV_id < det_id){
+                    else {
+                        data.data = "vessel_det_bridge_" + std::to_string(sUAV_id - 1);
+                    }
                 }
             }
-            else{
+            else {
                 if (sUAV_id % (sUAV_NUM / 2) == 1){
                     data.data = "vessel_det_upload";
                 }
@@ -1096,7 +1115,7 @@ private:
         printf("Prepare @ %s\n", MyDataFun::output_str(prepare_point).c_str());
         printf("Stretch @ %s\n", MyDataFun::output_str(search_tra[0]).c_str());
 
-        printf("Search Progress: ");
+        printf("Search Progress(%d): ", search_tra_finish);
         for (int i = 1; i <= sUAV_NUM; i++){
             if (same_side(i)){
                 printf("%d/", search_progress[i]);
@@ -1185,7 +1204,7 @@ private:
         if (get_time_now() > last_comm_time_search + 0.2){
             last_comm_time_search = get_time_now();
             ros_ign_interfaces::msg::Dataframe search_com_data;
-            search_progress[sUAV_id] = search_tra_finish;
+            // search_progress[sUAV_id] = search_tra_finish;
             search_com_data.data.resize(sUAV_NUM + 1);
             for (int i = 1; i <= sUAV_NUM; i++){
                 search_com_data.data[i] = search_progress[i];
