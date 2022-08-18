@@ -341,10 +341,14 @@ public:
                 else if (msg.data.size() == sUAV_NUM + 1){
                     for (int i = 1; i <= sUAV_NUM; i++){
                         if (i == sUAV_id) continue;
+                        if (msg.data[i] == 255) continue;
                         if (msg.data[i] > search_progress[i] || search_progress[i] == 255){
                             search_progress[i] = msg.data[i];
                         }
                     }
+                }
+                else if (msg.data.size() == 1){
+                    cmd = msg.data[0];
                 }
             }
         );
