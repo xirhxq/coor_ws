@@ -1106,7 +1106,7 @@ private:
         
         printf("Everyone det: %s by %d Time: %.2lf Yaw: %.2lf\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str(),
                                            tgt_vsl_det_id(),
-                                           det_res_time[TARGET_VESSEL - 'a'], vsl_det_yaw[i] * RAD2DEG);
+                                           det_res_time[TARGET_VESSEL - 'a'], vsl_det_yaw[TARGET_VESSEL - 'a'] * RAD2DEG);
 
         // printf("Detection Counter: ");
         // for (int i = 0; i < VESSEL_NUM; i++){
