@@ -1004,7 +1004,7 @@ private:
         int det_id = nxt_pursue_id(tgt_vsl_det_id());
         if (same_side(det_id)){
             std_msgs::msg::String data;
-            if (status != "vessel_id_success"){
+            if (phase == "started"){
                 if (det_id == sUAV_id){
                     if (sUAV_id % (sUAV_NUM / 2) == 1){
                         data.data = "vessel_det_one";
@@ -1029,11 +1029,11 @@ private:
             }
             else {
                 if (sUAV_id % (sUAV_NUM / 2) == 1){
-                    data.data = "vessel_det_upload";
+                    data.data = "vessel_det_success_upload";
                 }
                 // else if (sUAV_id < det_id){
                 else {
-                    data.data = "vessel_det_bridge_" + std::to_string(sUAV_id - 1);
+                    data.data = "vessel_det_success_bridge_" + std::to_string(sUAV_id - 1);
                 }
             }
             printf("%s\n", data.data.c_str());
