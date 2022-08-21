@@ -11,13 +11,13 @@
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'e'
+#define TARGET_VESSEL 'b'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
 #define VSL_DET_ENCODE_SIZE (5 * DOUBLE_ENCODE_SIZE + 1)
 
-#define USE_GROUNDTRUTH
+// #define USE_GROUNDTRUTH
 
 using namespace geometry_msgs::msg;
 using namespace std::chrono_literals;
@@ -457,7 +457,7 @@ public:
         // MyDataFun::output_vector(search_tra);
 
         prepare_point = scissor_point(85 * DEG2RAD, 50, 30 + 2 * scissor_part_id(sUAV_id));
-        for (int i = 85; i >= 10; i -= 1){
+        for (int i = 85; i >= 3; i -= 1){
             search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 50 + 2 * scissor_part_id(sUAV_id)));
         }
 
@@ -748,7 +748,7 @@ private:
         Point res;
         int part_id = (sUAV_id > sUAV_NUM / 2) ? (sUAV_id - sUAV_NUM / 2) : sUAV_id;
         res.x = part_id * unit_l;
-        res.y = (sUAV_id % 2) ? -unit_h : unit_h;
+        res.y = (sUAV_id % 2) ? unit_h : -unit_h;
         res.z = scissor_height;
 
         theta = (sUAV_id > sUAV_NUM / 2) ? (-abs(theta)) : (abs(theta));
@@ -769,13 +769,13 @@ private:
         cmd.linear.x *= X_KP;
         cmd.linear.y *= Y_KP;
         cmd.linear.z *= Z_KP;
-        // printf("Vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_length(cmd.linear);
         // printf("Sat vel cmd (earth): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         e2b(cmd.linear);
         // printf("Vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_vel(cmd.linear);
-        // printf("Sat vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
+        printf("Sat vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_yaw_rate(cmd.angular.z);
         // printf("Sat yaw cmd (body): %.2lf\n", cmd.angular.z);
         vel_cmd_pub->publish(cmd);
@@ -843,7 +843,7 @@ private:
         if (cmd != 233){
             return;
         }
-        UAV_Control_earth(0, 0, 0, 0);
+        UAV_Control_body(0, 0, 0, 0);
         task_begin_time = get_time_now();
         search_tra_finish = 255;
         if (UAV_pos.x != 0.0 || UAV_pos.y != 0.0 || UAV_pos.z != 0.0){
