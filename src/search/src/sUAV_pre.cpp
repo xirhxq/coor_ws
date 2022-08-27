@@ -113,7 +113,7 @@ public:
     MyMathFun::DATA_STAT vsl_pos_stat[VESSEL_NUM];
 
     // [Valid] MidFilter of target vessel position
-    MyMathFun::XYZ_Filter<Point> vsl_pos_fil[VESSEL_NUM];
+    MyMathFun::XYZ_Median_Filter<Point> vsl_pos_fil[VESSEL_NUM];
 
     // Pixel x & y values of target
     double vis_vsl_pix[2];

@@ -23,11 +23,11 @@ namespace MyMathFun{
 		}
 	};
 
-	struct Filter{
+	struct Median_Filter{
 		std::vector<double> v;
 		size_t size;
 
-		Filter(size_t sz_){
+		Median_Filter(size_t sz_){
 			size = sz_;
 			while (!v.empty()) v.erase(v.begin());
 		}
@@ -44,16 +44,74 @@ namespace MyMathFun{
 		}
 
 		void output(){
-			printf("Now Filter Contains:");
+			printf("Now Median Filter Contains:");
+			for (auto i: v) printf("\t%lf", i);
+			printf("\n");
+		}
+	};
+
+	struct Average_Filter{
+		std::vector<double> v;
+		size_t size;
+
+		Average_Filter(size_t sz_){
+			size = sz_;
+			while (!v.empty()) v.erase(v.begin());
+		}
+
+		void new_data(double nd_){
+			v.push_back(nd_);
+			while (v.size() > size) v.erase(v.begin());
+		}
+
+		double result(){
+			std::vector<double> tmp = v;
+			double res = 0.0;
+			for (auto a: v){
+				res += a;
+			}
+			return res / tmp.size();
+		}
+
+		void output(){
+			printf("Now Average Filter Contains:");
 			for (auto i: v) printf("\t%lf", i);
 			printf("\n");
 		}
 	};
 
 	template<typename T>
-	struct XYZ_Filter{
-		Filter x, y, z;
-		XYZ_Filter(int sz_ = 11): x(sz_), y(sz_), z(sz_){
+	struct XYZ_Median_Filter{
+		Median_Filter x, y, z;
+		XYZ_Median_Filter(int sz_ = 11): x(sz_), y(sz_), z(sz_){
+			
+		}
+
+		void new_data(T nd_){
+			x.new_data(nd_.x);
+			y.new_data(nd_.y);
+			z.new_data(nd_.z);
+		}
+
+		T result(){
+			T res;
+			res.x = x.result();
+			res.y = y.result();
+			res.z = z.result();
+			return res;
+		}
+
+		void output(){
+			x.output();
+			y.output();
+			z.output();
+		}
+	};
+
+	template<typename T>
+	struct XYZ_Average_Filter{
+		Average_Filter x, y, z;
+		XYZ_Average_Filter(int sz_ = 11): x(sz_), y(sz_), z(sz_){
 			
 		}
 

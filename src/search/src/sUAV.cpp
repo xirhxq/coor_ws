@@ -11,7 +11,7 @@
 #define Z_KP KP
 #define YAW_KP 1
 
-#define TARGET_VESSEL 'b'
+#define TARGET_VESSEL 'e'
 #define COMM_RANGE 800
 
 #define DOUBLE_ENCODE_SIZE 4
@@ -87,6 +87,9 @@ public:
     // Velocity command for sUAV itself
     Point UAV_vel;
 
+    // Average filter for velocity command
+    MyMathFun::XYZ_Average_Filter<Vector3> cmd_filter;
+
     // Euler angles of sUAV itself
     double UAV_Euler[3];
 
@@ -97,7 +100,7 @@ public:
     Point vsl_pos[VESSEL_NUM];
 
     // [Valid] MidFilter of target vessel position
-    MyMathFun::XYZ_Filter<Point> vsl_pos_fil[VESSEL_NUM];
+    MyMathFun::XYZ_Median_Filter<Point> vsl_pos_fil[VESSEL_NUM];
 
     // Pixel x & y values of target
     double vis_vsl_pix[2];
@@ -192,6 +195,12 @@ public:
 
     // [StepSearch] Vessel det time
     double vsl_det_time[VESSEL_NUM];
+
+    // [StepPursue] Pursue finish;
+    bool pursue_finish;
+
+    // [StepPursue] Pursue finish time;
+    double pursue_finish_time;
     
     // [StepMap] Vessel ID to map
     int vsl_id;
@@ -325,8 +334,10 @@ public:
                                 tmp[j] /= 100.0;
                                 if (msg.data[i * VSL_DET_ENCODE_SIZE + j * DOUBLE_ENCODE_SIZE + 1] == 1) tmp[j] = -tmp[j]; 
                             }
-                            if (tmp[4] > det_res_time[i] && other_id != 0){
-                                printf("Has get %d's detection result for %d\n", other_id, i);
+                            if (tmp[4] > det_res_time[i] && other_id != 0 && tmp[2] < 4000.0){
+                                printf("From %s: %d for %c @ (%.2lf, %.2lf, %.2lf)\n", msg.src_address.c_str(), other_id, 'A' + i, 
+                                                                                       tmp[0], tmp[1], tmp[2]);
+                                // printf("Has get %d's detection result for %d\n", other_id, i);
                                     // del_det_res(det_res[i], i);
                                 if (!has_someone_det(i)){
                                     new_det_res(other_id, i);
@@ -338,18 +349,19 @@ public:
                     }
                 }
                 else if (msg.data.size() == sUAV_NUM + 1){
-                    printf("msg (%ld) time: %.2lf %s\n", msg.data.size(), msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9, msg.src_address.c_str());
+                    // printf("msg (%ld) time: %.2lf %s\n", msg.data.size(), msg.header.stamp.sec + 1.0 * msg.header.stamp.nanosec / 1e9, msg.src_address.c_str());
                     for (int i = 1; i <= sUAV_NUM; i++){
-                        printf("%d", msg.data[i]);
+                        // printf("%d", msg.data[i]);
                         if (i == sUAV_id) continue;
                         if (msg.data[i] == 255) continue;
                         if (msg.data[i] > search_progress[i] || search_progress[i] == 255){
                             search_progress[i] = msg.data[i];
                         }
                     }
-                    printf("\n");
+                    // printf("\n");
                 }
                 else if (msg.data.size() == 1){
+                    // printf("get %d from %s\n", msg.data[0], msg.src_address.c_str());
                     cmd = msg.data[0];
                 }
             }
@@ -457,8 +469,11 @@ public:
         // MyDataFun::output_vector(search_tra);
 
         prepare_point = scissor_point(85 * DEG2RAD, 50, 30 + 2 * scissor_part_id(sUAV_id));
-        for (int i = 85; i >= 3; i -= 1){
-            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, scissor_length(1.0 * i * DEG2RAD), 100, 50 + 2 * scissor_part_id(sUAV_id)));
+        for (int i = 80; i >= -80; i -= 1){
+            search_tra.push_back(scissor_point(1.0 * i * DEG2RAD, 
+                                               scissor_length(1.0 * i * DEG2RAD), 
+                                               100, 
+                                               50 + 2 * scissor_part_id(sUAV_id) - (sUAV_id > 7)));
         }
 
         for (size_t i = 0; i < search_tra.size(); i++){
@@ -483,6 +498,8 @@ public:
         last_comm_time_det = 0.0;
         last_comm_time_search = 0.0;
         last_comm_time_tgt = 0.0;
+
+        pursue_finish = false;
 
     }
 
@@ -550,7 +567,7 @@ private:
     }
 
     void update_time(){
-        task_time = get_time_now() - task_begin_time;
+        task_time = get_time_now();
     }
 
     template<typename T>
@@ -636,7 +653,7 @@ private:
     }
 
     int nxt_pursue_id(int x){
-        if (x % sUAV_NUM == 0) return x;
+        if (x % (sUAV_NUM / 2) == 0) return x;
         else return x + 1;
     }
 
@@ -734,7 +751,8 @@ private:
 
     double scissor_length(double theta){
         theta = std::abs(theta);
-        double width = 3000.0, length = 3000.0;
+        // double width = 3000.0, length = 3000.0;
+        double width = 2000.0, length = 2000.0;
         double gamma = std::atan(width / length / 2.0);
         if (theta > gamma){
             return (width / 2.0 / std::sin(theta)) / (sUAV_NUM / 2.0 + 1);
@@ -748,7 +766,7 @@ private:
         Point res;
         int part_id = (sUAV_id > sUAV_NUM / 2) ? (sUAV_id - sUAV_NUM / 2) : sUAV_id;
         res.x = part_id * unit_l;
-        res.y = (sUAV_id % 2) ? unit_h : -unit_h;
+        res.y = (sUAV_id % 2) ? -unit_h : unit_h;
         res.z = scissor_height;
 
         theta = (sUAV_id > sUAV_NUM / 2) ? (-abs(theta)) : (abs(theta));
@@ -778,6 +796,8 @@ private:
         printf("Sat vel cmd (body): %.2lf %.2lf %.2lf\n", cmd.linear.x, cmd.linear.y, cmd.linear.z);
         saturate_yaw_rate(cmd.angular.z);
         // printf("Sat yaw cmd (body): %.2lf\n", cmd.angular.z);
+        cmd_filter.new_data(cmd.linear);
+        MyDataFun::set_value(cmd.linear, cmd_filter.result());
         vel_cmd_pub->publish(cmd);
         b2e(cmd.linear);
         MyDataFun::set_value(UAV_vel, cmd.linear);
@@ -797,7 +817,6 @@ private:
         cmd.angular.z = yaw_rate;
         MyDataFun::set_value(cmd.linear, ctrl_cmd);
         saturate_vel(cmd.linear);
-        MyDataFun::set_value(UAV_vel, cmd.linear);
         vel_cmd_pub->publish(cmd);
         b2e(cmd.linear);
         MyDataFun::set_value(UAV_vel, cmd.linear);
@@ -831,6 +850,15 @@ private:
     void UAV_Control_to_Point_with_facing(T1 ctrl_cmd, T2 p){
         double yaw_diff = MyDataFun::angle_2d(UAV_pos, p) - UAV_Euler[2];
         UAV_Control_earth(MyDataFun::minus(ctrl_cmd, UAV_pos), yaw_diff);
+    }
+
+    template<typename T>
+    void UAV_Control_just_facing(T p){
+        double yaw_diff = MyDataFun::angle_2d(UAV_pos, p) - UAV_Euler[2];
+        auto cmd = UAV_pos;
+        double dis2vsl = MyDataFun::dis_2d(UAV_pos, p);
+        cmd.z = dis2vsl * 0.5;
+        UAV_Control_body(0, 0, 0, yaw_diff);
     }
 
     void StepInit(){
@@ -991,17 +1019,40 @@ private:
     }
 
     void StepPursue(){
+        int det_id = nxt_pursue_id(tgt_vsl_det_id());
+        if (sUAV_id == det_id && vsl_pos[TARGET_VESSEL - 'a'].z < 4000.0){
+            MyDataFun::set_value(vsl_det_pos[TARGET_VESSEL - 'a'], vsl_pos[TARGET_VESSEL - 'a']);
+        }
         double theta = scissor_theta(vsl_det_pos[TARGET_VESSEL - 'a']);
         double expect_len = target_dis_from_start(vsl_det_pos[TARGET_VESSEL - 'a']) / scissor_part_id(nxt_pursue_id(tgt_vsl_det_id()));
         printf("%d around target (dis: %.2lf)\n", nxt_pursue_id(tgt_vsl_det_id()), target_dis_from_start(vsl_det_pos[TARGET_VESSEL - 'a']));
         printf("Expect length: %.2lf (instead of %.2lf)\n", expect_len, scissor_length(theta));
-        Point pursue_point = scissor_point(theta, expect_len, 100, 50);
+        Point pursue_point = scissor_point(theta, expect_len, 100,
+                                           50 + 2 * scissor_part_id(sUAV_id) - (sUAV_id > 7));
         // Point pursue_point = scissor_point(theta, scissor_length(theta), 100, 50);
         printf("Target Vessel @ %s\n", MyDataFun::output_str(vsl_det_pos[TARGET_VESSEL - 'a']).c_str());
         printf("Pursue to %s\n", MyDataFun::output_str(pursue_point).c_str());
-        UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
+        printf("Dis to pursue point: %.2lf(%d, %.2lf)\n", MyDataFun::dis_2d(pursue_point, UAV_pos), pursue_finish, pursue_finish_time);
 
-        int det_id = nxt_pursue_id(tgt_vsl_det_id());
+        if (sUAV_id == det_id && phase == "started" && is_near_2d(pursue_point, 10) 
+            && det_start_time[TARGET_VESSEL - 'a'] >= 10 && get_time_now() >= det_start_time[TARGET_VESSEL - 'a'] + 20.0){
+            if (!pursue_finish){
+                pursue_finish_time = get_time_now();
+                pursue_finish = true;
+            }
+        }
+        if (sUAV_id == det_id && pursue_finish && phase == "started"){
+            UAV_Control_just_facing(vsl_det_pos[TARGET_VESSEL - 'a']);
+        }
+        else {
+            UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
+        }
+
+        if (sUAV_id == det_id && is_near_2d(pursue_point, 10)){
+            sat_vel.x = 0.5;
+            sat_vel.y = 0.5;
+            sat_vel.z = 0.5;
+        }
         if (same_side(det_id)){
             std_msgs::msg::String data;
             if (phase == "started"){
@@ -1010,7 +1061,7 @@ private:
                         data.data = "vessel_det_one";
                     }
                     // else if (rel_loc[TARGET_VESSEL - 'a'].size() >= rel_loc_buffer_size) {
-                    else if (get_time_now() >= det_start_time[TARGET_VESSEL - 'a'] + 20.0 && det_start_time[TARGET_VESSEL - 'a'] >= 10) {
+                    else if (pursue_finish && get_time_now() >= pursue_finish_time + 5.0) {
                         data.data = "vessel_det_source_" + std::to_string(sUAV_id - 1);
                     }
                     else {
@@ -1087,7 +1138,7 @@ private:
         time_t tt = time(NULL);
         tm* t = localtime(&tt);
         log_file.precision(7);
-        log_file << get_time_now() - task_begin_time << "\t"
+        log_file << get_time_now() << "\t"
                  << t->tm_mday << "\t"
                  << t->tm_hour << "\t"
                  << t->tm_min << "\t"
@@ -1105,7 +1156,7 @@ private:
     void timer_callback() {
         update_time();
         std::cout << "\033c" << std::flush;
-        printf("Time: %.2lf(%.2lf)\n", task_time, run_clock);
+        printf("Time: %.2lf(%.2lf) Start @ %.2lf\n", task_time, run_clock, task_begin_time);
         printf("Phase: %s\nStatus: %s\nScore: %.2lf\n", phase.c_str(), status.c_str(), score);
         printf("sUAV #%d @ %s\n", sUAV_id, MyDataFun::output_str(UAV_pos).c_str());
         printf("Commander cmd: %d\n", cmd);
