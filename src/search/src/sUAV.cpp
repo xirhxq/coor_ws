@@ -652,6 +652,10 @@ private:
         return 0;
     }
 
+    bool if_i_am_detecting(){
+        return vsl_det_time[TARGET_VESSEL - 'a'] >= get_time_now() - 0.1;
+    }
+
     int nxt_pursue_id(int x){
         if (x % (sUAV_NUM / 2) == 0) return x;
         else return x + 1;
@@ -659,7 +663,7 @@ private:
 
     template<typename T>
     double target_dis_from_start(T target_pos){
-        return MyDataFun::dis(target_pos, MyDataFun::new_point(-1500, 0, 0));
+        return MyDataFun::dis(target_pos, MyDataFun::new_point(-1450, 0, 0));
     }
 
     template<typename T>
@@ -1024,7 +1028,10 @@ private:
             MyDataFun::set_value(vsl_det_pos[TARGET_VESSEL - 'a'], vsl_pos[TARGET_VESSEL - 'a']);
         }
         double theta = scissor_theta(vsl_det_pos[TARGET_VESSEL - 'a']);
-        double expect_len = target_dis_from_start(vsl_det_pos[TARGET_VESSEL - 'a']) / scissor_part_id(nxt_pursue_id(tgt_vsl_det_id()));
+        double target_distance = target_dis_from_start(vsl_det_pos[TARGET_VESSEL - 'a']);
+        double shrink_distance = 60.0;
+        if (target_distance > shrink_distance) target_distance -= shrink_distance;
+        double expect_len =  target_distance / scissor_part_id(nxt_pursue_id(tgt_vsl_det_id()));
         printf("%d around target (dis: %.2lf)\n", nxt_pursue_id(tgt_vsl_det_id()), target_dis_from_start(vsl_det_pos[TARGET_VESSEL - 'a']));
         printf("Expect length: %.2lf (instead of %.2lf)\n", expect_len, scissor_length(theta));
         Point pursue_point = scissor_point(theta, expect_len, 100,
@@ -1041,18 +1048,18 @@ private:
                 pursue_finish = true;
             }
         }
-        if (sUAV_id == det_id && pursue_finish && phase == "started"){
+        if (pursue_finish && if_i_am_detecting()){
             UAV_Control_just_facing(vsl_det_pos[TARGET_VESSEL - 'a']);
         }
         else {
             UAV_Control_to_Point_with_facing(pursue_point, vsl_det_pos[TARGET_VESSEL - 'a']);
         }
 
-        if (sUAV_id == det_id && is_near_2d(pursue_point, 10)){
-            sat_vel.x = 0.5;
-            sat_vel.y = 0.5;
-            sat_vel.z = 0.5;
-        }
+        // if (sUAV_id == det_id && is_near_2d(pursue_point, 10)){
+        //     sat_vel.x = 0.5;
+        //     sat_vel.y = 0.5;
+        //     sat_vel.z = 0.5;
+        // }
         if (same_side(det_id)){
             std_msgs::msg::String data;
             if (phase == "started"){
@@ -1061,7 +1068,7 @@ private:
                         data.data = "vessel_det_one";
                     }
                     // else if (rel_loc[TARGET_VESSEL - 'a'].size() >= rel_loc_buffer_size) {
-                    else if (pursue_finish && get_time_now() >= pursue_finish_time + 5.0) {
+                    else if (pursue_finish && get_time_now() >= pursue_finish_time + 5.0 && if_i_am_detecting()) {
                         data.data = "vessel_det_source_" + std::to_string(sUAV_id - 1);
                     }
                     else {
@@ -1279,7 +1286,6 @@ private:
                 data.theta = vsl_det_yaw[TARGET_VESSEL - 'a'];
                 ros_ign_interfaces::msg::Dataframe pub_data;
                 pub_data.src_address = "suav_" + std::to_string(sUAV_id);
-                pub_data.dst_address = "usv";
                 pub_data.data.resize(5 * 3);
 
                 double tmp[4] = {data.x * 100, data.y * 100, data.theta * 100};
@@ -1294,9 +1300,10 @@ private:
                     pub_data.data[k * 5 + 3] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 1);
                     pub_data.data[k * 5 + 4] = MyDataFun::encode_uint8(uint32_t(tmp[k]), 0);
                 }
-
-                
-                if (data.x != 0.0 || data.y != 0.0){
+                if (data.x != 0.0 && data.y != 0.0 && data.x != 5000.0 && data.y != 5000.0){
+                    pub_data.dst_address = "usv";
+                    tgt_vsl_pub->publish(pub_data);
+                    pub_data.dst_address = "tuav_1";
                     tgt_vsl_pub->publish(pub_data);
                 }
         // }
