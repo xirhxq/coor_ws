@@ -34,6 +34,7 @@ typedef enum TASK_CODE{
     PURSUE,
     BRIDGE,
     HOLD,
+    UP,
     BACK,
     LAND
 } STATE_CODE;
@@ -343,7 +344,8 @@ public:
                                     new_det_res(other_id, i);
                                 }
                                 MyDataFun::set_value(vsl_det_pos[i], tmp);
-                                vsl_det_yaw[i] = tmp[3];
+                                int src_id = get_msg_src_id(msg.src_address);
+                                if (sUAV_id != nxt_pursue_id(other_id)) vsl_det_yaw[i] = tmp[3];
                                 det_res_time[i] = tmp[4];
                             }
                     }
@@ -547,7 +549,7 @@ private:
             // vsl_det_yaw[vis_vsl_num] = std::atan2(delta_y_vsl, delta_x_vsl);
             double delta_x_vsl = last.delta_x - first.delta_x + (last.pos_x - first.pos_x);
             double delta_y_vsl = last.delta_y - first.delta_y + (last.pos_y - first.pos_y);
-            if (status != "vessel_id_success"){
+            if (phase == "started"){
                 vsl_det_yaw[vis_vsl_num] = std::atan2(delta_y_vsl, delta_x_vsl);
             }
             printf("dx: %.2lf dy: %.2lf yaw: %.2lf\n", delta_x_vsl, delta_y_vsl, vsl_det_yaw[vis_vsl_num]);
@@ -578,6 +580,10 @@ private:
     template<typename T>
     bool is_near_2d(T a, double r){
         return MyDataFun::dis_2d(a, UAV_pos) <= r;
+    }
+
+    bool is_at_height(double h, double tol = 2.0){
+        return UAV_pos.z >= h - tol && UAV_pos.z <= h + tol;
     }
 
     template<typename T>
@@ -669,6 +675,16 @@ private:
     template<typename T>
     int bridge_num(T target_pos){
         return std::ceil(target_dis_from_start(target_pos) / COMM_RANGE) - 1;
+    }
+
+    int get_msg_src_id(std::string s){
+        int l = s.size();
+        if (s[l - 2] >= '0' && s[l - 2] <= '9'){
+            return (s[l - 2] - '0') * 10 + (s[l - 1] - '0');
+        }
+        else {
+            return (s[l - 1] - '0');
+        }
     }
 
     bool if_i_am_bridge(int id){
@@ -832,6 +848,12 @@ private:
         cmd.linear.y = y;
         cmd.linear.z = z;
         UAV_Control_body(cmd.linear, yaw_rate);
+    }
+
+    void UAV_Control_to_height(double h){
+        geometry_msgs::msg::Twist cmd;
+        cmd.linear.z = h - UAV_pos.z;
+        UAV_Control_body(cmd.linear, 0);
     }
     
     template<typename T>
@@ -1129,6 +1151,15 @@ private:
         }
     }
 
+    void StepUp(){
+        printf("Up to boundary!!!\n");
+        double up_height = 125;
+        UAV_Control_to_height(up_height);
+        if (is_at_height(up_height)){
+            task_state = BACK;
+        }
+    }
+
     void StepBack(){
         UAV_Control_to_Point_earth(takeoff_point);
      	printf("Back!!!\n");
@@ -1320,6 +1351,9 @@ private:
             // }
             if (status.find("vessel_id_success") != std::string::npos && task_state != PURSUE){
                 task_state = BACK;
+                if (scissor_part_id(sUAV_id) == sUAV_NUM / 2){
+                    task_state = UP;
+                }
             }
         }
 
@@ -1354,6 +1388,10 @@ private:
             }
             case HOLD:{
                 StepHold();
+                break;
+            }
+            case UP:{
+                StepUp();
                 break;
             }
             case BACK:{
